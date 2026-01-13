@@ -1,20 +1,22 @@
 """Free energy calculations using Empirical Valence Bond (EVB) methods."""
 
 from copy import deepcopy
+import MDAnalysis as mda
+import numpy as np
 from openmm import CustomBondForce, CustomCompoundBondForce, HarmonicBondForce
 from openmm.unit import angstrom
-import numpy as np
 import parsl
 from parsl import python_app, Config
 from pathlib import Path
+import polars as pl
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
     import tomli as tomllib  # Python 3.10
 import traceback
 from typing import Any, Optional, Type, TypeVar
-from omm_simulator import ImplicitSimulator, Simulator
-from reporters import RCReporter
+from .omm_simulator import ImplicitSimulator, Simulator
+from .reporters import RCReporter
 
 _T = TypeVar('_T')
     
@@ -55,9 +57,9 @@ class EVB:
     def __init__(self,
                  topology: Path,
                  coordinates: Path,
-                 umbrella_atoms: list[int],
-                 morse_atoms: list[int],
-                 reaction_coordinate:  list[float],
+                 donor_atom: str,
+                 acceptor_atom: str,
+                 reactive_atom: str,
                  parsl_config: Config,
                  log_path: Path,
                  log_prefix: str='reactant',
@@ -70,6 +72,7 @@ class EVB:
                  alpha: float=13.275,      # Morse width parameter (nm^-1) - computed from sqrt(k_bond/(2*D_e))
                  r0: float=0.1,            # Equilibrium bond distance (nm)
                  platform: str='CUDA',
+                 reaction_coordinate: Optional[list[float]]=None,
                  restraint_sel: Optional[str]=None):
         """Initialize the EVB orchestrator.
 
@@ -98,8 +101,6 @@ class EVB:
         """
         self.topology = Path(topology)
         self.coordinates = Path(coordinates)
-        self.umbrella_atoms = umbrella_atoms
-        self.morse_atoms = morse_atoms
         self.path = self.topology.parent / 'evb'
 
         self.parsl_config = parsl_config
@@ -119,31 +120,34 @@ class EVB:
         
         self.platform = platform
         self.restraint_sel = restraint_sel
-
-        self.reaction_coordinate = self.construct_rc(reaction_coordinate)
-
-        self.inspect_inputs()
-
-    def inspect_inputs(self) -> None:
-        """Inspects EVB inputs to assure everything is formatted correctly.
         
-        Raises:
-            AssertionError: Any input file is missing or the indices are set
-                wrong. Additionally checks to make sure reaction coordinate
-                is set correctly, having more than 1 window.
-        """
-        paths = [
-            self.topology, self.coordinates,
-        ]
+        self.prepare_inputs(donor_atom, acceptor_atom, reactive_atom, reaction_coordinate)
 
-        for path in paths:
-            assert path.exists(), f'File {path} not found!'
+    def prepare_inputs(self,
+                       donor: str,
+                       acceptor: str,
+                       reactor: str,
+                       rc: Optional[list[float]]=None,
+                       n_windows: float=50) -> None:
+        """"""
+        u = mda.Universe(self.topology, self.coordinates)
 
-        assert len(self.umbrella_atoms) == 3, f'Need 3 umbrella atoms!'
-        assert len(self.morse_atoms) == 2, f'Need 2 morse bond atoms!'
-        assert self.reaction_coordinate.shape[0] > 1, f'RC needs at least 1 window!'
+        a0 = u.select_atoms(donor)
+        a1 = u.select_atoms(acceptor)
+        a2 = u.select_atoms(reactor)
 
-        self.log_path.mkdir(exist_ok=True, parents=True)
+        self.morse_atoms = [a0.ix[0], a2.ix[0]]
+        self.umbrella_atoms = [a0.ix[0], a1.ix[0], a2.ix[0]]
+        
+        if rc is None:
+            p0 = a0.positions 
+            p1 = a1.positions
+            p2 = a2.positions
+            
+            rc_min = np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)
+            rc = [rc_min, rc_min * -1, np.abs(rc_min * 2) / n_windows]
+
+        self.reaction_coordinate = self.construct_rc(rc)
 
     def construct_rc(self,
                      rc: list[float]) -> np.ndarray:
@@ -403,8 +407,8 @@ class EVBCalculation:
         Returns:
             CustomBondForce: Force that drives sampling in each umbrella window.
         """
-        force = CustomCompoundBondForce(3, '0.5 * k * ((r13 - r23) - rc0) ^ 2; r13=distance(p1, p3); r23=distance(p2, p3);')
-        force.addGlobalParameter('k', k)
+        force = CustomCompoundBondForce(3, '0.5 * k_umb * ((r13 - r23) - rc0) ^ 2; r13=distance(p1, p3); r23=distance(p2, p3);')
+        force.addGlobalParameter('k_umb', k)
         force.addGlobalParameter('rc0', rc0)
         force.addBond([atom_i, atom_j, atom_k])
     
@@ -544,3 +548,7 @@ class EVBCalculation:
         if not found_bond and not found_constraint:
             print(f"Warning: No harmonic bond or constraint found between atoms {atom_i} and {atom_j}")
 
+def process_evb_run(path: Path) -> pl.DataFrame:
+    """Reads in RCReporter log from an EVB run and computes the energy terms
+    based on the Morse bond definition."""
+    pass
