@@ -66,8 +66,9 @@ class TestEVBInit:
             evb = EVB(
                 topology=topology,
                 coordinates=coordinates,
-                umbrella_atoms=[0, 1, 2],
-                morse_atoms=[0, 2],
+                donor_atom='0',
+                acceptor_atom='1',
+                reactive_atom='2',
                 reaction_coordinate=[-0.3, 0.3, 0.1],
                 parsl_config=mock_config,
                 log_path=log_path,
@@ -75,8 +76,6 @@ class TestEVBInit:
 
             assert evb.topology == topology
             assert evb.coordinates == coordinates
-            assert evb.umbrella_atoms == [0, 1, 2]
-            assert evb.morse_atoms == [0, 2]
             assert evb.parsl_config is mock_config
             assert evb.log_path == log_path
 

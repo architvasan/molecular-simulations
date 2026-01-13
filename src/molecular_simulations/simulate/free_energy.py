@@ -2,8 +2,13 @@
 
 from copy import deepcopy
 import MDAnalysis as mda
+from natsort import natsorted
 import numpy as np
-from openmm import CustomBondForce, CustomCompoundBondForce, HarmonicBondForce
+from openmm import (Context, 
+                    CustomBondForce, 
+                    CustomCompoundBondForce, 
+                    HarmonicBondForce)
+from openmm.app import VerletIntegrator
 from openmm.unit import angstrom
 import parsl
 from parsl import python_app, Config
@@ -15,7 +20,7 @@ except ModuleNotFoundError:
     import tomli as tomllib  # Python 3.10
 import traceback
 from typing import Any, Optional, Type, TypeVar
-from .omm_simulator import ImplicitSimulator, Simulator
+from .omm_simulator import Simulator
 from .reporters import RCReporter
 
 _T = TypeVar('_T')
@@ -72,6 +77,7 @@ class EVB:
                  alpha: float=13.275,      # Morse width parameter (nm^-1) - computed from sqrt(k_bond/(2*D_e))
                  r0: float=0.1,            # Equilibrium bond distance (nm)
                  platform: str='CUDA',
+                 n_windows: int=50,
                  reaction_coordinate: Optional[list[float]]=None,
                  restraint_sel: Optional[str]=None):
         """Initialize the EVB orchestrator.
@@ -120,6 +126,7 @@ class EVB:
         
         self.platform = platform
         self.restraint_sel = restraint_sel
+        self.n_windows = n_windows
         
         self.prepare_inputs(donor_atom, acceptor_atom, reactive_atom, reaction_coordinate)
 
@@ -127,8 +134,7 @@ class EVB:
                        donor: str,
                        acceptor: str,
                        reactor: str,
-                       rc: Optional[list[float]]=None,
-                       n_windows: float=50) -> None:
+                       rc: Optional[list[float]]=None,) -> None:
         """"""
         u = mda.Universe(self.topology, self.coordinates)
 
@@ -145,7 +151,8 @@ class EVB:
             p2 = a2.positions
             
             rc_min = np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)
-            rc = [rc_min, rc_min * -1, np.abs(rc_min * 2) / n_windows]
+            rc_interval = np.abs(rc_min * 2) / self.n_windows
+            rc = [rc_min, rc_min * -1 + rc_interval, rc_interval]
 
         self.reaction_coordinate = self.construct_rc(rc)
 
@@ -215,6 +222,51 @@ class EVB:
             # Stop Parsl to avoid zombie processes
             self.shutdown()
     
+    def process_evb_run(self) -> None:
+        """Reads in RCReporter log from an EVB run and computes the energy terms
+        based on the Morse bond definition."""
+        sim_engine = Simulator(
+            path = self.topology.parent,
+            top_name = self.topology.name,
+            coor_name = self.coordinates.name,
+            out_path = self.path,
+            prod_steps = 1,
+            platform = self.platform,
+        )
+        system = sim_engine.load_system()
+
+        morse_bond = EVBCalculation.morse_bond_force(**self.morse_bond)
+        system.addForce(morse_bond)
+
+        context = Context(system, VerletIntegrator(0.001))
+        
+        windows = natsorted(list(self.path.glob('window*')))
+        energies = []
+        rcs = []
+        for i, window in enumerate(windows):
+            # Get RC column
+            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
+            rc_contents = pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy()
+            rcs.append(rc_contents)
+
+            # Compute each window energy
+            window_energies = []
+            u = mda.Universe(self.topology, window / 'prod.dcd')
+            window_energies = np.zeros((len(u.trajectory)))
+            for j, ts in enumerate(u.trajectory):
+                positions = u.atoms.positions
+                context.setPositions(positions)
+
+                energy = pmd.openmm.energy_decomposition(sim.topology, context)['total']
+                window_energies[j] = energy
+
+            energies.append(window_energies)
+        
+        energies = np.concatenate(energies)
+
+        df = pl.DataFrame({'RC': rcs, 'E': energies})
+        df.write_parquet(f'{self.log_path / self.log_prefix}.parquet')
+
     @property
     def umbrella(self) -> dict[str, Any]:
         """Sets up Umbrella force settings for force calculation.
@@ -267,7 +319,6 @@ class EVB:
             'alpha': self.alpha,
             'r0': self.r0,
         }
-
     
 class EVBCalculation:
     """Runs a single EVB window."""
@@ -387,6 +438,7 @@ class EVBCalculation:
         )
 
         simulation.step(self.steps)
+
     
     @staticmethod
     def umbrella_force(atom_i: int,
@@ -548,7 +600,3 @@ class EVBCalculation:
         if not found_bond and not found_constraint:
             print(f"Warning: No harmonic bond or constraint found between atoms {atom_i} and {atom_j}")
 
-def process_evb_run(path: Path) -> pl.DataFrame:
-    """Reads in RCReporter log from an EVB run and computes the energy terms
-    based on the Morse bond definition."""
-    pass
