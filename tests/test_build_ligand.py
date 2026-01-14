@@ -326,6 +326,7 @@ class TestLigandError:
 class TestLigandBuilder:
     """Test suite for LigandBuilder class"""
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_ligand_builder_init(self, mock_difficult_dependencies):
         """Test LigandBuilder initialization"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -347,6 +348,7 @@ class TestLigandBuilder:
             assert builder.lig == path / 'ligand.sdf'
             assert builder.ln == 0
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_ligand_builder_init_with_prefix(self, mock_difficult_dependencies):
         """Test LigandBuilder initialization with file prefix"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -366,6 +368,7 @@ class TestLigandBuilder:
             assert builder.ln == 1
             assert 'prefix_' in str(builder.out_lig)
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_ligand_builder_write_leap(self, mock_difficult_dependencies):
         """Test write_leap method"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -383,6 +386,7 @@ class TestLigandBuilder:
             assert Path(leap_file).exists()
             assert Path(leap_file).read_text() == leap_content
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_process_sdf(self, mock_difficult_dependencies):
         """Test process_sdf method"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -413,6 +417,7 @@ class TestLigandBuilder:
             mock_chem.SDMolSupplier.assert_called_once()
             mock_chem.AddHs.assert_called_once_with(mock_mol, addCoords=True)
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_process_pdb(self, mock_difficult_dependencies):
         """Test process_pdb method"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -441,6 +446,7 @@ class TestLigandBuilder:
             mock_chem.MolFromPDBFile.assert_called_once()
             mock_chem.AddHs.assert_called_once_with(mock_mol, addCoords=True)
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_check_sqm_success(self, mock_difficult_dependencies):
         """Test check_sqm with successful calculation"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -465,6 +471,7 @@ class TestLigandBuilder:
         finally:
             os.chdir(cwd)
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_check_sqm_failure(self, mock_difficult_dependencies):
         """Test check_sqm with failed calculation"""
         from molecular_simulations.build.build_ligand import LigandBuilder, LigandError
@@ -489,6 +496,7 @@ class TestLigandBuilder:
         finally:
             os.chdir(cwd)
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_convert_to_mol2(self, mock_difficult_dependencies):
         """Test convert_to_mol2 method"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -512,6 +520,7 @@ class TestLigandBuilder:
             mock_pybel.readfile.assert_called_once_with('sdf', 'ligand_H.sdf')
             mock_mol.write.assert_called_once()
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_move_antechamber_outputs(self, mock_difficult_dependencies):
         """Test move_antechamber_outputs method"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -785,6 +794,7 @@ END
 class TestLigandBuilderAdditional:
     """Additional tests for LigandBuilder"""
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_ligand_builder_default_prefix(self, mock_difficult_dependencies):
         """Test LigandBuilder with default empty prefix"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -799,6 +809,7 @@ class TestLigandBuilderAdditional:
             # out_lig should not have a prefix
             assert str(builder.out_lig).endswith('ligand')
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     def test_ligand_builder_lig_number(self, mock_difficult_dependencies):
         """Test LigandBuilder with different ligand numbers"""
         from molecular_simulations.build.build_ligand import LigandBuilder
@@ -816,6 +827,7 @@ class TestLigandBuilderAdditional:
 class TestLigandBuilderParameterize:
     """Test suite for LigandBuilder parameterize methods"""
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     @patch('molecular_simulations.build.build_ligand.os.system')
     @patch('molecular_simulations.build.build_ligand.os.chdir')
     def test_parameterize_ligand_sdf(self, mock_chdir, mock_os_system, mock_difficult_dependencies):
@@ -848,6 +860,7 @@ class TestLigandBuilderParameterize:
 
             mock_os_system.assert_called()
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     @patch('molecular_simulations.build.build_ligand.os.system')
     @patch('molecular_simulations.build.build_ligand.os.chdir')
     def test_parameterize_ligand_pdb(self, mock_chdir, mock_os_system, mock_difficult_dependencies):
@@ -1300,6 +1313,7 @@ class TestPLINDERBuilderAssemble:
 class TestLigandBuilderFileNotFound:
     """Test LigandBuilder error handling"""
 
+    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
     @patch('molecular_simulations.build.build_ligand.os.system')
     def test_parameterize_ligand_file_not_found(self, mock_os_system, mock_difficult_dependencies):
         """Test parameterize_ligand raises LigandError on FileNotFoundError"""
