@@ -1405,7 +1405,8 @@ class TestComplexBuilderBuildMethod:
                 )
 
                 with patch.object(builder, 'prep_pdb'), \
-                     patch.object(builder, 'assemble_system'):
+                     patch.object(builder, 'assemble_system'), \
+                     patch.object(builder, 'get_pdb_extent', return_value=100):
                     builder.build()
 
                 # LigandBuilder should not be called when using precomputed params
@@ -1451,7 +1452,8 @@ class TestComplexBuilderBuildMethod:
                 )
 
                 with patch.object(builder, 'prep_pdb'), \
-                     patch.object(builder, 'assemble_system'):
+                     patch.object(builder, 'assemble_system'), \
+                     patch.object(builder, 'get_pdb_extent', return_value=100):
                     builder.build()
 
                 # LigandBuilder should be called for each ligand
@@ -1499,7 +1501,8 @@ class TestComplexBuilderBuildMethod:
 
                 with patch.object(builder, 'prep_pdb'), \
                      patch.object(builder, 'assemble_system'), \
-                     patch.object(builder, 'add_ion_to_pdb') as mock_add_ion:
+                     patch.object(builder, 'add_ion_to_pdb') as mock_add_ion, \
+                     patch.object(builder, 'get_pdb_extent', return_value=100):
                     builder.build()
 
                 mock_add_ion.assert_called_once()
@@ -2044,12 +2047,10 @@ class TestComplexBuilderAssembleSystem:
     """Test ComplexBuilder assemble_system method."""
 
     @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_ligand.os.system')
-    def test_assemble_system_single_ligand(self, mock_os_system, mock_difficult_dependencies):
+    @patch('subprocess.run')
+    def test_assemble_system_single_ligand(self, mock_subprocess_run, mock_difficult_dependencies):
         """Test assemble_system with single ligand."""
         from molecular_simulations.build.build_ligand import ComplexBuilder
-
-        mock_os_system.return_value = 0
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -2067,27 +2068,19 @@ class TestComplexBuilderAssembleSystem:
             builder.lig = path / 'build' / 'ligand'
             builder.ffs = ['leaprc.protein.ff19SB', 'leaprc.gaff2']
             builder.water_box = 'TIP3PBOX'
-
-            # Add write_leap method manually since ComplexBuilder doesn't have it
-            def write_leap(inp):
-                leap_file = path / 'tleap.in'
-                with open(leap_file, 'w') as f:
-                    f.write(inp)
-                return str(leap_file)
-
-            builder.write_leap = write_leap
+            builder.debug = False
+            builder.delete = True
+            builder.tleap = 'tleap'
 
             builder.assemble_system(dim=80.0, num_ions=50)
 
-            mock_os_system.assert_called_once()
+            mock_subprocess_run.assert_called_once()
 
     @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_ligand.os.system')
-    def test_assemble_system_multiple_ligands(self, mock_os_system, mock_difficult_dependencies):
+    @patch('subprocess.run')
+    def test_assemble_system_multiple_ligands(self, mock_subprocess_run, mock_difficult_dependencies):
         """Test assemble_system with multiple ligands."""
         from molecular_simulations.build.build_ligand import ComplexBuilder
-
-        mock_os_system.return_value = 0
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -2106,19 +2099,13 @@ class TestComplexBuilderAssembleSystem:
             builder.lig = [path / 'build' / 'lig1', path / 'build' / 'lig2']
             builder.ffs = ['leaprc.protein.ff19SB', 'leaprc.gaff2']
             builder.water_box = 'TIP3PBOX'
-
-            # Add write_leap method manually since ComplexBuilder doesn't have it
-            def write_leap(inp):
-                leap_file = path / 'tleap.in'
-                with open(leap_file, 'w') as f:
-                    f.write(inp)
-                return str(leap_file)
-
-            builder.write_leap = write_leap
+            builder.debug = False
+            builder.delete = True
+            builder.tleap = 'tleap'
 
             builder.assemble_system(dim=80.0, num_ions=50)
 
-            mock_os_system.assert_called_once()
+            mock_subprocess_run.assert_called_once()
 
 
 class TestComplexBuilderProcessLigandEdgeCases:

@@ -85,6 +85,15 @@ class LigandBuilder:
         self.ln = lig_number
         self.out_lig = path / f'{file_prefix}{Path(lig).stem}'
 
+        if 'AMBERHOME' in os.environ:
+            amberhome = Path(os.environ['AMBERHOME'])
+        else:
+            raise ValueError('AMBERHOME is not set in env vars!')
+
+        self.antechamber = str(amberhome / 'bin' / 'antechamber')
+        self.parmchk2 = str(amberhome / 'bin' / 'parmchk2')
+        self.tleap = str(amberhome / 'bin' / 'tleap')
+
     def parameterize_ligand(self) -> None:
         """Generate GAFF2 parameters for the ligand.
 
@@ -101,9 +110,9 @@ class LigandBuilder:
         ext = self.lig.suffix
         self.lig = self.lig.stem
 
-        convert_to_gaff = f'antechamber -i {self.lig}_prep.mol2 -fi mol2 -o \
+        convert_to_gaff = f'{self.antechamber} -i {self.lig}_prep.mol2 -fi mol2 -o \
                 {self.out_lig}.mol2 -fo mol2 -at gaff2 -c bcc -s 0 -pf y -rn LG{self.ln}'
-        parmchk2 = f'parmchk2 -i {self.out_lig}.mol2 -f mol2 -o {self.out_lig}.frcmod'
+        parmchk2_cmd = f'{self.parmchk2} -i {self.out_lig}.mol2 -f mol2 -o {self.out_lig}.frcmod'
 
         tleap_ligand = f"""source leaprc.gaff2
         LG{self.ln} = loadmol2 {self.out_lig}.mol2
@@ -122,9 +131,9 @@ class LigandBuilder:
         try:
             self.move_antechamber_outputs()
             self.check_sqm()
-            os.system(parmchk2)
+            os.system(parmchk2_cmd)
             leap_file, leap_log = self.write_leap(tleap_ligand)
-            os.system(f'tleap -f {leap_file} > {leap_log}')
+            os.system(f'{self.tleap} -f {leap_file} > {leap_log}')
         except FileNotFoundError:
             raise LigandError(f'Antechamber failed! {self.lig}')
 
@@ -609,7 +618,7 @@ class ComplexBuilder(ExplicitSolvent):
                  lig_param_prefix: str | None = None, **kwargs):
         """Initialize the ComplexBuilder."""
         super().__init__(path, pdb, padding)
-        self.lig = Path(lig) if isinstance(lig, str) else [Path(l) for l in lig]
+        self.lig = Path(lig).resolve() if isinstance(lig, str) else [Path(l).resolve() for l in lig]
         self.ffs.append('leaprc.gaff2')
         self.build_dir = self.out.parent / 'build'
 
@@ -648,7 +657,9 @@ class ComplexBuilder(ExplicitSolvent):
             self.add_ion_to_pdb()
 
         self.prep_pdb()
-        self.assemble_system()
+        dim = self.get_pdb_extent()
+        num_ions = self.get_ion_numbers(dim**3)
+        self.assemble_system(dim, num_ions)
 
     def process_ligand(self, lig: PathLike, prefix: int | None = None) -> PathLike:
         """Process and parameterize a single ligand.
@@ -669,7 +680,7 @@ class ComplexBuilder(ExplicitSolvent):
         lig_builder = LigandBuilder(self.build_dir, lig, file_prefix=prefix)
         lig_builder.parameterize_ligand()
 
-        return lig_builder.lig
+        return lig_builder.out_lig
 
     def add_ion_to_pdb(self) -> None:
         """Add ion coordinates to the protein PDB file.
@@ -721,22 +732,27 @@ class ComplexBuilder(ExplicitSolvent):
 
             LABELS.append(f'LG{i}')
 
-        LABELS.append(f'PROT')
+        LABELS.append('PROT')
         LABELS = ' '.join(LABELS)
+        
+        out_top = self.out.with_suffix('.prmtop')
+        out_coor = self.out.with_suffix('.inpcrd')
 
-        tleap_complex = [
+        tleap_complex += [
             f'PROT = loadpdb {self.pdb}',
-            f'COMPLEX = combine {{LABELS}}',
+            f'COMPLEX = combine {{{LABELS}}}',
             'setbox COMPLEX centers',
             f'set COMPLEX box {{{dim} {dim} {dim}}}',
             f'solvatebox COMPLEX {self.water_box} {{0 0 0}}',
             'addions COMPLEX Na+ 0',
             'addions COMPLEX Cl- 0',
             f'addIonsRand COMPLEX Na+ {num_ions} Cl- {num_ions}',
-            f'savepdb COMPLEX {self.out}.pdb',
-            f'saveamberparm COMPLEX {self.out}.prmtop {self.out}.inpcrd'
+            f'savepdb COMPLEX {self.out}',
+            f'saveamberparm COMPLEX {out_top} {out_coor}',
+            'quit'
         ]
 
-        leap_file = self.write_leap('\n'.join(tleap_complex))
-        tleap = f'tleap -f {leap_file}'
-        os.system(tleap)
+        if self.debug:
+            self.debug_tleap('\n'.join(tleap_complex))
+        else:
+            self.temp_tleap('\n'.join(tleap_complex))
