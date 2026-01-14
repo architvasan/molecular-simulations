@@ -1022,6 +1022,9 @@ class TestComputePMFHistogram:
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
 
+    @pytest.mark.filterwarnings("ignore:Mean of empty slice:RuntimeWarning")
+    @pytest.mark.filterwarnings("ignore:invalid value encountered:RuntimeWarning")
+    @pytest.mark.filterwarnings("ignore:Degrees of freedom <= 0:RuntimeWarning")
     def test_empty_array_equilibration(self, analyzer_class):
         """Empty array should be handled gracefully in equilibration detection."""
         data = np.array([])

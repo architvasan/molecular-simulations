@@ -2206,7 +2206,7 @@ class TestComplexBuilderBuildFlows:
 
         mock_lig_builder = MagicMock()
         mock_builder = MagicMock()
-        mock_builder.lig = 'ligand'
+        mock_builder.out_lig = 'ligand'
         mock_lig_builder.return_value = mock_builder
         original_lig_builder = bl_mod.LigandBuilder
         bl_mod.LigandBuilder = mock_lig_builder
@@ -2228,7 +2228,8 @@ class TestComplexBuilderBuildFlows:
                 )
 
                 with patch.object(builder, 'prep_pdb'), \
-                     patch.object(builder, 'assemble_system'):
+                     patch.object(builder, 'assemble_system'), \
+                     patch.object(builder, 'get_pdb_extent', return_value=100):
                     builder.build()
 
                 # Should have processed single ligand

@@ -18,7 +18,7 @@ _T = TypeVar("_T")
 class BaseSettings(BaseModel):
     def dump_yaml(self, filename: PathLike) -> None:
         with open(filename, mode="w") as fp:
-            yaml.dump(json.loads(self.json()), fp, indent=4, sort_keys=False)
+            yaml.dump(json.loads(self.model_dump_json()), fp, indent=4, sort_keys=False)
 
     @classmethod
     def from_yaml(cls: Type[_T], filename: PathLike) -> _T:
