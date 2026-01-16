@@ -530,9 +530,11 @@ class TestEVBParslManagement:
                 )
 
             # Should not raise even when dfk is None
+            # parsl.clear() should NOT be called since dfk is None
             with patch.object(fe_module.parsl, 'clear') as mock_clear:
                 evb.shutdown()
-                mock_clear.assert_called()
+                mock_clear.assert_not_called()
+                assert evb.dfk is None
 
 
 class TestEVBCalculationInit:

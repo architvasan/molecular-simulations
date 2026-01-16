@@ -131,6 +131,8 @@ class Simulator:
                  heat_steps: int = 100_000,
                  equil_steps: int = 1_250_000,
                  prod_steps: int = 250_000_000,
+                 prod_dt_in_ps: float = 0.004,
+                 hydrogen_mass_repartitioning: float = 1.5,
                  n_equil_cycles: int = 3,
                  temperature: float = 300.,
                  eq_reporter_frequency: int = 1_000,
@@ -170,6 +172,8 @@ class Simulator:
         self.chkpt = p / 'prod.chk'
         self.prod_log = p / 'prod.log'
         self.prod_freq = prod_reporter_frequency
+        self.dt = prod_dt_in_ps
+        self.h_mass = hydrogen_mass_repartitioning * amu
 
         # simulation details
         self.heat_steps = heat_steps
@@ -416,7 +420,7 @@ class Simulator:
                 overwriting. Defaults to False.
         """
         system = self.load_system()
-        simulation, _ = self.setup_sim(system, dt=0.004)
+        simulation, _ = self.setup_sim(system, dt=self.dt)
 
         system.addForce(self.barostat(*self.barostat_args.values()))
         simulation.context.reinitialize(True)
@@ -772,10 +776,11 @@ class ImplicitSimulator(Simulator):
             self.coordinate = AmberInpcrdFile(str(self.coor_file))
             self.topology = AmberPrmtopFile(str(self.top_file))
 
+
         system = self.topology.createSystem(nonbondedMethod=NoCutoff,
                                             removeCMMotion=False,
                                             constraints=HBonds,
-                                            hydrogenMass=1.5 * amu,
+                                            hydrogenMass=self.h_mass,
                                             implicitSolvent=self.solvent,
                                             soluteDielectric=self.solute_dielectric,
                                             solventDielectric=self.solvent_dielectric,

@@ -11,7 +11,9 @@ import logging
 import MDAnalysis as mda
 import numpy as np
 from openmm import LangevinIntegrator
-from openmm.app import (CutoffNonPeriodic, 
+from openmm.app import (AmberPrmtopFile,
+                        AmberInpcrdFile,
+                        CutoffNonPeriodic, 
                         HBonds,
                         ForceField, 
                         PDBFile, 
@@ -205,7 +207,7 @@ class ConstantPHEnsemble:
                 reference_energies[residue.index] = [x * kilojoules_per_mole 
                                                      for x in self.ref_energies[residue.name]]
         
-        u = mda.Universe(str(path))
+        u = mda.Universe(str(path / 'system.prmtop'), str(path / 'system.inpcrd'))
         sel = u.select_atoms('protein')
         bad_keys = [sel[0].resid, sel[-1].resid] # termini
         
@@ -240,7 +242,7 @@ class ConstantPHEnsemble:
             top, pos = self.load_files(path)
             variants, reference_energies = self.build_dicts(path, top)
 
-            cph_params = self.params
+            cph_params = self.get_params(path)
 
             cph_params.update({
                 'residueVariants': variants, 
@@ -260,39 +262,41 @@ class ConstantPHEnsemble:
         _ = [x.result() for x in futures]
 
     
-    @property
-    def params(self) -> dict[str, Any]:
+    def get_params(self, path: Path) -> dict[str, Any]:
         """Build the parameter dictionary for ConstantPH initialization.
+
+        Args:
+            path: Directory containing system.prmtop and system.inpcrd files.
 
         Returns:
             Dictionary containing all parameters needed to initialize a
             ConstantPH simulation including file paths, pH values, integrators,
             and force field parameters for both explicit and implicit solvent.
         """
-        expl_params = dict(nonbondedMethod=PME, 
-                           nonbondedCutoff=0.9*nanometers, 
-                           constraints=HBonds, 
+        expl_params = dict(nonbondedMethod=PME,
+                           nonbondedCutoff=0.9*nanometers,
+                           constraints=HBonds,
                            hydrogenMass=1.5*amu)
-    
-        impl_params = dict(nonbondedMethod=CutoffNonPeriodic, 
-                           nonbondedCutoff=2.0*nanometers, 
+
+        impl_params = dict(nonbondedMethod=CutoffNonPeriodic,
+                           nonbondedCutoff=2.0*nanometers,
                            constraints=HBonds)
-    
-        integrator = LangevinIntegrator(self.temperature, 
-                                        1.0/picosecond, 
+
+        integrator = LangevinIntegrator(self.temperature,
+                                        1.0/picosecond,
                                         0.004*picosecond)
-        relaxation_integrator = LangevinIntegrator(self.temperature, 
-                                                   10.0/picosecond, 
+        relaxation_integrator = LangevinIntegrator(self.temperature,
+                                                   10.0/picosecond,
                                                    0.002*picosecond)
-    
+
         params = {
-            'prmtop_file': self.path / 'system.prmtop',
-            'inpcrd_file': self.path / 'system.inpcrd',
+            'prmtop_file': path / 'system.prmtop',
+            'inpcrd_file': path / 'system.inpcrd',
             'pH': self.pHs,
             'relaxationSteps': 1000,
-            'explicitArgs': expl_params, 
-            'implicitArgs': impl_params, 
-            'integrator': integrator, 
+            'explicitArgs': expl_params,
+            'implicitArgs': impl_params,
+            'integrator': integrator,
             'relaxationIntegrator': relaxation_integrator,
         }
 

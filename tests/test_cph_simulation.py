@@ -9,7 +9,7 @@ import numpy as np
 import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import Mock, MagicMock, patch
 
 
 # Mark tests that don't require OpenMM as unit tests
@@ -266,10 +266,7 @@ class TestConstantPHEnsembleParams:
                 log_dir=log_dir,
             )
 
-            # Set path attribute as the property expects it
-            ensemble.path = path
-
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             # Check required keys
             assert 'prmtop_file' in params
@@ -302,8 +299,7 @@ class TestConstantPHEnsembleParams:
                 log_dir=log_dir,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             expl_args = params['explicitArgs']
             assert expl_args['nonbondedMethod'] == PME
@@ -332,8 +328,7 @@ class TestConstantPHEnsembleParams:
                 log_dir=log_dir,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             impl_args = params['implicitArgs']
             assert impl_args['nonbondedMethod'] == CutoffNonPeriodic
@@ -361,8 +356,7 @@ class TestConstantPHEnsembleParams:
                 pHs=custom_phs,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             assert params['pH'] == custom_phs
 
@@ -387,8 +381,7 @@ class TestConstantPHEnsembleParams:
                 temperature=310.0,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             # Integrator should use the ensemble temperature
             integrator = params['integrator']
@@ -414,8 +407,7 @@ class TestConstantPHEnsembleParams:
                 log_dir=log_dir,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             assert params['relaxationSteps'] == 1000
 
@@ -438,8 +430,7 @@ class TestConstantPHEnsembleParams:
                 log_dir=log_dir,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             assert params['prmtop_file'] == path / 'system.prmtop'
             assert params['inpcrd_file'] == path / 'system.inpcrd'
@@ -683,8 +674,7 @@ class TestConstantPHEnsembleIntegrators:
                 log_dir=log_dir,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             assert params['integrator'] is not None
             assert isinstance(params['integrator'], LangevinIntegrator)
@@ -709,8 +699,7 @@ class TestConstantPHEnsembleIntegrators:
                 log_dir=log_dir,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             assert params['relaxationIntegrator'] is not None
             assert isinstance(params['relaxationIntegrator'], LangevinIntegrator)
@@ -738,8 +727,7 @@ class TestConstantPHEnsembleIntegrators:
                 temperature=320.0,
             )
 
-            ensemble.path = path
-            params = ensemble.params
+            params = ensemble.get_params(path)
 
             # Both integrators should use 320K
             assert params['integrator'].getTemperature() == 320.0 * kelvin
@@ -1006,8 +994,8 @@ class TestConstantPHEnsembleRun:
 
             with patch.object(ensemble, 'load_files', return_value=(mock_topology, mock_positions)):
                 with patch.object(ensemble, 'build_dicts', return_value=({}, {})):
-                    with patch.object(type(ensemble), 'params', new_callable=PropertyMock) as mock_params:
-                        mock_params.return_value = {
+                    with patch.object(ensemble, 'get_params') as mock_get_params:
+                        mock_get_params.return_value = {
                             'prmtop_file': base / 'system.prmtop',
                             'inpcrd_file': base / 'system.inpcrd',
                             'pH': [7.0],
@@ -1056,8 +1044,8 @@ class TestConstantPHEnsembleRun:
 
             with patch.object(ensemble, 'load_files', return_value=(mock_topology, mock_positions)):
                 with patch.object(ensemble, 'build_dicts', return_value=({}, {})):
-                    with patch.object(type(ensemble), 'params', new_callable=PropertyMock) as mock_params:
-                        mock_params.return_value = {
+                    with patch.object(ensemble, 'get_params') as mock_get_params:
+                        mock_get_params.return_value = {
                             'prmtop_file': path / 'system.prmtop',
                             'inpcrd_file': path / 'system.inpcrd',
                             'pH': [7.0],
@@ -1109,8 +1097,8 @@ class TestConstantPHEnsembleRunWithDefaults:
 
             with patch.object(ensemble, 'load_files', return_value=(mock_topology, mock_positions)):
                 with patch.object(ensemble, 'build_dicts', return_value=({}, {})):
-                    with patch.object(type(ensemble), 'params', new_callable=PropertyMock) as mock_params:
-                        mock_params.return_value = {
+                    with patch.object(ensemble, 'get_params') as mock_get_params:
+                        mock_get_params.return_value = {
                             'prmtop_file': path / 'system.prmtop',
                             'inpcrd_file': path / 'system.inpcrd',
                             'pH': [7.0],
@@ -1167,8 +1155,8 @@ class TestConstantPHEnsembleLogParams:
 
             with patch.object(ensemble, 'load_files', return_value=(mock_topology, mock_positions)):
                 with patch.object(ensemble, 'build_dicts', return_value=({}, {})):
-                    with patch.object(type(ensemble), 'params', new_callable=PropertyMock) as mock_params:
-                        mock_params.return_value = {
+                    with patch.object(ensemble, 'get_params') as mock_get_params:
+                        mock_get_params.return_value = {
                             'prmtop_file': base / 'system.prmtop',
                             'inpcrd_file': base / 'system.inpcrd',
                             'pH': [7.0],

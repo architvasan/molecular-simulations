@@ -801,6 +801,7 @@ class EVB:
 
         self.parsl_config = parsl_config
         self.dfk = None
+        self._owns_parsl = False  # Track if we loaded Parsl or borrowed it
 
         self.log_path = Path(log_path)
         self.log_prefix = log_prefix
@@ -860,17 +861,36 @@ class EVB:
 
 
     def initialize(self) -> None:
-        """Initialize Parsl for runs"""
+        """Initialize Parsl for runs.
+
+        If Parsl is already running (e.g., from a parent pipeline), reuses the
+        existing DataFlowKernel. Otherwise, loads a new one from parsl_config.
+        """
         if self.dfk is None:
-            self.dfk = parsl.load(self.parsl_config)
+            try:
+                # Try to get existing DFK (may be from parent pipeline)
+                existing_dfk = parsl.dfk()
+                self.dfk = existing_dfk
+                self._owns_parsl = False
+                logger.info("Reusing existing Parsl DataFlowKernel")
+            except Exception:
+                # No DFK exists, load a new one
+                self.dfk = parsl.load(self.parsl_config)
+                self._owns_parsl = True
+                logger.info("Initialized new Parsl DataFlowKernel")
 
     def shutdown(self) -> None:
-        """Clean up Parsl after runs"""
-        if self.dfk:
-            self.dfk.cleanup()
-            self.dfk = None
+        """Clean up Parsl after runs.
 
-        parsl.clear()
+        Only cleans up if this instance loaded Parsl itself. If Parsl was
+        borrowed from a parent pipeline, leaves it running.
+        """
+        if self._owns_parsl and self.dfk:
+            self.dfk.cleanup()
+            parsl.clear()
+            logger.info("Shut down Parsl DataFlowKernel")
+        self.dfk = None
+        self._owns_parsl = False
 
     def run_evb(self) -> None:
         """Collect futures for each EVB window and distribute."""
