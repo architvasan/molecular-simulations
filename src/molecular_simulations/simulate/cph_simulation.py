@@ -113,10 +113,10 @@ class ConstantPHEnsemble:
     def __init__(self,
                  paths: list[Path],
                  reference_energies: dict[str, list[float]],
-                 parsl_config: Config,
-                 log_dir: Path,
+                 log_dir: Path | list[Path],
                  pHs: list[float]=[x+0.5 for x in range(14)],
                  temperature: float=300.,
+                 parsl_config: Optional[Config]=None,
                  variant_sel: Optional[str]=None,):
         """Initialize the constant pH ensemble.
 
@@ -227,7 +227,7 @@ class ConstantPHEnsemble:
     
     def run(self,
             n_cycles: int=500,
-            n_steps: int=500) -> None:
+            n_steps: int=500) -> dict:
         """Run the constant pH simulation ensemble.
 
         Distributes simulation replicas across available resources using
@@ -236,6 +236,8 @@ class ConstantPHEnsemble:
         Args:
             n_cycles: Number of MD/MC cycles per replica. Defaults to 500.
             n_steps: Number of MD steps per cycle. Defaults to 500.
+        Returns:
+            (dict): Dictionary containing failure modes, empty if all successful.
         """
         futures = []
         for i, path in enumerate(self.paths):
@@ -249,18 +251,30 @@ class ConstantPHEnsemble:
                 'referenceEnergies': reference_energies,
             })
 
+            if isinstance(self.log_dir, list):
+                log_dir = self.log_dir[i]
+            else:
+                log_dir = self.log_dir
+
             log_params = {
                 'run_id': self.run_id,
                 'task_id': f'{i:05d}',
-                'log_dir': self.log_dir,
+                'log_dir': log_dir,
             }
     
             futures.append(
                 run_cph_sim(cph_params, self.temperature, n_cycles, n_steps, log_params, str(path))
             )
 
-        _ = [x.result() for x in futures]
+        results = {}
+        for i, future in enumerate(futures):
+            try:
+                future.result()
+                results[i] = None # Success
+            except Exception as e:
+                results[i] = e # Failure
 
+        return results
     
     def get_params(self, path: Path) -> dict[str, Any]:
         """Build the parameter dictionary for ConstantPH initialization.
