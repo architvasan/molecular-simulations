@@ -386,7 +386,13 @@ class ConstantPH:
             titration.currentIndex = titration.protonatedIndex
 
     def _mapStatesToImplicitSystem(self):
-        """Map protonation state force indices from ForceField system to ParmEd implicit system."""
+        """Map protonation state force indices from ForceField system to ParmEd implicit system.
+
+        This method:
+        1. Remaps force indices from ForceField-created system to ParmEd implicit system
+        2. Updates atom indices to use implicit system coordinates
+        3. Ensures all states have consistent atoms with ghost hydrogens
+        """
         # Find NonbondedForce and GBSAOBCForce indices in the ParmEd implicit system
         implicitNBForceIdx = None
         implicitGBForceIdx = None
@@ -399,21 +405,31 @@ class ConstantPH:
         if implicitNBForceIdx is None:
             raise RuntimeError('No NonbondedForce found in implicit system')
 
+        implicitNBForce = self.implicitSystem.getForce(implicitNBForceIdx)
+        implicitGBForce = self.implicitSystem.getForce(implicitGBForceIdx) if implicitGBForceIdx is not None else None
+
+        # Build a reference system to identify force types from ForceField
+        # We'll use the force field to create a temporary system and check force types
+        tempSystem = self.implicitForceField.createSystem(
+            self.proteinTopology, **self._implicitArgs
+        )
+        ffForceTypes = {}
+        for fi, force in enumerate(tempSystem.getForces()):
+            if isinstance(force, NonbondedForce):
+                ffForceTypes[fi] = 'NB'
+            elif isinstance(force, GBSAOBCForce):
+                ffForceTypes[fi] = 'GB'
+
         for resIndex, titration in self.titrations.items():
             for state in titration.implicitStates:
-                # Find the NonbondedForce and GBSAOBCForce indices from the ForceField system
+                # Map ForceField force indices to implicit system force indices
                 ffNBForceIdx = None
                 ffGBForceIdx = None
                 for fi in state.particleParameters:
-                    # We need to check what type of force this was in the ForceField system
-                    # Since we can't access the ForceField system here, we check by parameter structure
-                    params = state.particleParameters[fi]
-                    if params:
-                        # Get a sample parameter to determine force type
-                        sampleParam = next(iter(params.values()))
-                        if len(sampleParam) == 3:  # NonbondedForce: (charge, sigma, epsilon)
+                    if fi in ffForceTypes:
+                        if ffForceTypes[fi] == 'NB':
                             ffNBForceIdx = fi
-                        elif len(sampleParam) == 2:  # GBSAOBCForce: (charge, radius) or (radius, scale)
+                        elif ffForceTypes[fi] == 'GB':
                             ffGBForceIdx = fi
 
                 # Remap particle parameters to use implicit system force indices
@@ -442,6 +458,44 @@ class ConstantPH:
                             for atom in implicitResidues[implicitResIdx].atoms()
                         }
                         state.residueIndex = implicitResIdx
+
+            # Second pass: ensure all implicit states have consistent atoms with ghost hydrogens
+            protonated = titration.protonatedIndex
+            protonatedState = titration.implicitStates[protonated]
+            protonatedNBParams = protonatedState.particleParameters.get(implicitNBForceIdx, {})
+            protonatedGBParams = protonatedState.particleParameters.get(implicitGBForceIdx, {}) if implicitGBForceIdx else {}
+            protonatedExceptionParams = protonatedState.exceptionParameters.get(implicitNBForceIdx, {})
+
+            for i, state in enumerate(titration.implicitStates):
+                if i == protonated:
+                    continue
+
+                # Ensure NB parameters include all atoms from protonated state
+                stateNBParams = state.particleParameters.get(implicitNBForceIdx, {})
+                for atomName in protonatedNBParams:
+                    if atomName not in stateNBParams:
+                        originalParams = protonatedNBParams[atomName]
+                        zeroParams = self._get_zero_parameters(originalParams, implicitNBForce)
+                        stateNBParams[atomName] = zeroParams
+                state.particleParameters[implicitNBForceIdx] = stateNBParams
+
+                # Ensure GB parameters include all atoms from protonated state
+                if implicitGBForceIdx is not None and implicitGBForce is not None:
+                    stateGBParams = state.particleParameters.get(implicitGBForceIdx, {})
+                    for atomName in protonatedGBParams:
+                        if atomName not in stateGBParams:
+                            originalParams = protonatedGBParams[atomName]
+                            zeroParams = self._get_zero_parameters(originalParams, implicitGBForce)
+                            stateGBParams[atomName] = zeroParams
+                    state.particleParameters[implicitGBForceIdx] = stateGBParams
+
+                # Handle exceptions for ghost atoms
+                stateExceptionParams = state.exceptionParameters.get(implicitNBForceIdx, {})
+                for key in protonatedExceptionParams:
+                    if key not in stateExceptionParams:
+                        originalParams = protonatedExceptionParams[key]
+                        stateExceptionParams[key] = (0.0,) + originalParams[1:]
+                state.exceptionParameters[implicitNBForceIdx] = stateExceptionParams
 
     def _findResidueStates(self, topology, positions, forcefield, variants, ffargs):
         """Build ResidueState objects for residues with specified variants."""
@@ -560,7 +614,11 @@ class ConstantPH:
         self.implicit14Scale = 1.0 / 1.2  # AMBER default Coulomb 1-4 scale
 
     def _buildAtomIndexMapping(self):
-        """Build mapping from implicit atom indices to explicit atom indices."""
+        """Build mapping from implicit atom indices to explicit atom indices.
+
+        This maps each atom in the implicit (stripped) system to its corresponding
+        atom in the explicit system, enabling position copying between systems.
+        """
         numImplicitAtoms = self.implicitSystem.getNumParticles()
         implicitAtomIndex = np.zeros(numImplicitAtoms, dtype=np.int64)
 
@@ -578,15 +636,15 @@ class ConstantPH:
             # Build atom name -> index map for explicit residue
             explicitAtoms = {atom.name: atom.index for atom in explicitRes.atoms()}
 
-            # Map implicit atoms to explicit atoms
-            for atom in implicitRes.atoms:
-                implicitIdx = implicitAtomOffset + atom.idx - implicitRes.atoms[0].idx
+            # Map implicit atoms to explicit atoms using enumeration
+            # This is more robust than using ParmEd's global atom.idx
+            for localIdx, atom in enumerate(implicitRes.atoms):
+                implicitIdx = implicitAtomOffset + localIdx
                 if atom.name in explicitAtoms:
                     implicitAtomIndex[implicitIdx] = explicitAtoms[atom.name]
                 else:
                     # Fallback: try to match by position in residue
                     atomList = list(explicitRes.atoms())
-                    localIdx = atom.idx - implicitRes.atoms[0].idx
                     if localIdx < len(atomList):
                         implicitAtomIndex[implicitIdx] = atomList[localIdx].index
 
@@ -595,8 +653,26 @@ class ConstantPH:
         self.implicitAtomIndex = implicitAtomIndex
 
     def _mapStatesToExplicitSystem(self):
-        """Map protonation state parameters from implicit to explicit system."""
+        """Map protonation state parameters from implicit to explicit system.
+
+        This method:
+        1. Creates explicit states for each protonation state
+        2. Ensures all states have the same atom indices (using ghost atoms with zero charge)
+        3. Tracks hydrogen indices for multi-site titrations
+        """
         explicitResidues = list(self.explicitTopology.residues())
+
+        # Find force indices in explicit system
+        explicitNBForceIdx = None
+        for fi, force in enumerate(self.explicitSystem.getForces()):
+            if isinstance(force, NonbondedForce):
+                explicitNBForceIdx = fi
+                break
+
+        if explicitNBForceIdx is None:
+            raise RuntimeError('No NonbondedForce found in explicit system')
+
+        explicitNBForce = self.explicitSystem.getForce(explicitNBForceIdx)
 
         for resIndex, titration in self.titrations.items():
             protonated = titration.protonatedIndex
@@ -607,18 +683,8 @@ class ConstantPH:
                 for atom in explicitResidues[resIndex].atoms()
             }
 
-            # Create explicit states based on implicit states
+            # First pass: build all explicit states with their original parameters
             for i, implicitState in enumerate(titration.implicitStates):
-                # Find NonbondedForce in explicit system
-                explicitNBForceIdx = None
-                for fi, force in enumerate(self.explicitSystem.getForces()):
-                    if isinstance(force, NonbondedForce):
-                        explicitNBForceIdx = fi
-                        break
-
-                if explicitNBForceIdx is None:
-                    raise RuntimeError('No NonbondedForce found in explicit system')
-
                 # Get implicit NonbondedForce index
                 implicitNBForceIdx = None
                 for fi in implicitState.particleParameters:
@@ -632,14 +698,13 @@ class ConstantPH:
                 explicitExceptionParams = {explicitNBForceIdx: {}}
 
                 # Map particle parameters
-                if implicitNBForceIdx in implicitState.particleParameters:
+                if implicitNBForceIdx is not None and implicitNBForceIdx in implicitState.particleParameters:
                     for atomName, params in implicitState.particleParameters[implicitNBForceIdx].items():
                         if atomName in explicitAtomIndices:
                             explicitParticleParams[explicitNBForceIdx][atomName] = params
 
                 # Map exception parameters
-                if implicitNBForceIdx in implicitState.exceptionParameters:
-                    implicitResIdx = self.explicitToImplicitResidueMap.get(resIndex)
+                if implicitNBForceIdx is not None and implicitNBForceIdx in implicitState.exceptionParameters:
                     for key, params in implicitState.exceptionParameters[implicitNBForceIdx].items():
                         # Convert key from implicit to explicit residue index
                         newKey = (resIndex, key[1], key[2])
@@ -651,15 +716,48 @@ class ConstantPH:
                 )
                 titration.explicitStates.append(explicitState)
 
-                # Track hydrogen indices for multi-site titrations
-                if i != protonated:
-                    for atomName, atomIdx in explicitAtomIndices.items():
-                        atom = list(explicitResidues[resIndex].atoms())[0]
-                        # Check if this is a titratable hydrogen
-                        for a in explicitResidues[resIndex].atoms():
-                            if a.name == atomName and a.element == element.hydrogen:
-                                if atomName not in implicitState.atomIndices:
-                                    titration.explicitHydrogenIndices.append(atomIdx)
+            # Second pass: ensure all states have consistent atoms with ghost hydrogens
+            # Get parameters from the fully protonated state (which has all atoms)
+            protonatedState = titration.explicitStates[protonated]
+            protonatedParams = protonatedState.particleParameters.get(explicitNBForceIdx, {})
+            protonatedExceptionParams = protonatedState.exceptionParameters.get(explicitNBForceIdx, {})
+
+            for i, state in enumerate(titration.explicitStates):
+                if i == protonated:
+                    continue
+
+                # For each atom in the protonated state, ensure this state has it too
+                stateParams = state.particleParameters.get(explicitNBForceIdx, {})
+                stateExceptionParams = state.exceptionParameters.get(explicitNBForceIdx, {})
+
+                for atomName in protonatedParams:
+                    if atomName not in stateParams:
+                        # This atom doesn't exist in this protonation state
+                        # Use zero parameters (ghost atom)
+                        originalParams = protonatedParams[atomName]
+                        zeroParams = self._get_zero_parameters(originalParams, explicitNBForce)
+                        stateParams[atomName] = zeroParams
+
+                        # Track this as a titratable hydrogen for multi-site moves
+                        atomIdx = explicitAtomIndices.get(atomName)
+                        if atomIdx is not None:
+                            # Check if it's a hydrogen
+                            for atom in explicitResidues[resIndex].atoms():
+                                if atom.name == atomName and atom.element == element.hydrogen:
+                                    if atomIdx not in titration.explicitHydrogenIndices:
+                                        titration.explicitHydrogenIndices.append(atomIdx)
+                                    break
+
+                # Handle exceptions for ghost atoms
+                for key in protonatedExceptionParams:
+                    if key not in stateExceptionParams:
+                        # Zero out the charge product for this exception
+                        originalParams = protonatedExceptionParams[key]
+                        stateExceptionParams[key] = (0.0,) + originalParams[1:]
+
+                # Update the state's parameters
+                state.particleParameters[explicitNBForceIdx] = stateParams
+                state.exceptionParameters[explicitNBForceIdx] = stateExceptionParams
 
     def _findExceptionIndices(self, system, topology):
         """Map (residue, atom1, atom2) -> exception index in NonbondedForce."""
@@ -790,7 +888,7 @@ class ConstantPH:
                 for i, t in zip(stateIndex, titrations)
             ])
 
-            w = (newEnergy - currentEnergy - deltaRefEnergy) / kT - deltaN * np.log(10.0) * self.pH[self.currentPHIndex]
+            w = (newEnergy - currentEnergy - deltaRefEnergy) / kT + deltaN * np.log(10.0) * self.pH[self.currentPHIndex]
 
             if w > 0.0 and np.exp(-w) < np.random.random():
                 # Reject: restore previous state
@@ -857,10 +955,29 @@ class ConstantPH:
                 self.relaxationContext.getState(getPositions=True).getPositions(asNumpy=True)
             )
 
-    def _applyStateToContext(self, state, context, exceptionIndex, interResidue14, coulomb14Scale):
-        """Update context parameters to match a protonation state."""
-        forces_to_update = []
+    def _get_zero_parameters(self, original_parameters, force):
+        """Get per-particle parameter values with charge set to 0.
 
+        This is used for "ghost" hydrogens that exist in the fully protonated
+        state but not in deprotonated states.
+        """
+        p = list(original_parameters)
+        if isinstance(force, (NonbondedForce, GBSAOBCForce)):
+            # First parameter is charge for both NonbondedForce and GBSAOBCForce
+            p[0] = 0.0
+        else:
+            # For custom forces, find the charge parameter by name
+            for i in range(force.getNumPerParticleParameters()):
+                if force.getPerParticleParameterName(i) == 'charge':
+                    p[i] = 0.0
+        return tuple(p)
+
+    def _applyStateToContext(self, state, context, exceptionIndex, interResidue14, coulomb14Scale):
+        """Update context parameters to match a protonation state.
+
+        This modifies Force parameters in the System and then calls
+        updateParametersInContext() to push changes to the GPU/CPU context.
+        """
         for forceIndex, params in state.particleParameters.items():
             force = context.getSystem().getForce(forceIndex)
 
@@ -891,11 +1008,8 @@ class ConstantPH:
                     q2, _, _ = force.getParticleParameters(p2)
                     force.setExceptionParameters(index, p1, p2, coulomb14Scale * q1 * q2, sigma, epsilon)
 
-            forces_to_update.append(force)
-
-        # Reinitialize once (not per-force) then update all forces
-        context.reinitialize(preserveState=True)
-        for force in forces_to_update:
+            # Update parameters in context for this force
+            # Note: no need to call context.reinitialize() - updateParametersInContext is sufficient
             force.updateParametersInContext(context)
 
     def _selectNewState(self, titration):
