@@ -10,31 +10,21 @@ import json
 import logging
 import MDAnalysis as mda
 import numpy as np
-from openmm import LangevinIntegrator
 from openmm.app import (AmberPrmtopFile,
                         AmberInpcrdFile,
-                        CutoffNonPeriodic, 
-                        HBonds,
-                        ForceField, 
                         PDBFile, 
-                        PME,
                         Topology)
-from openmm.unit import (amu,
-                         kelvin, 
-                         kilojoules_per_mole,
-                         nanometers, 
-                         picosecond)
 import parsl
 from parsl import Config, python_app
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 import uuid
 from .constantph.constantph import ConstantPH
 from .constantph.logging import setup_task_logger
 
 @python_app
 def run_cph_sim(params: dict[str, Any],
-                temperature: kelvin,
+                temperature: float,
                 n_cycles: int,
                 n_steps: int,
                 log_params: dict[str, str],
@@ -47,18 +37,49 @@ def run_cph_sim(params: dict[str, Any],
     Args:
         params: Dictionary of ConstantPH parameters including topology,
             coordinates, residue variants, and reference energies.
-        temperature: Simulation temperature with OpenMM units.
+        temperature: Simulation temperature as float.
         n_cycles: Number of MD/MC cycles to perform.
         n_steps: Number of MD steps per cycle.
         log_params: Dictionary containing logging configuration with
             run_id, task_id, and log_dir.
         path: Path to the simulation directory for logging purposes.
     """
+    from openmm import LangevinIntegrator
+    from openmm.app import CutoffNonPeriodic, HBonds, PME
+    from openmm.unit import amu, kelvin, kilojoules_per_mole, picosecond, nanometers
+
     variants = params['residueVariants']
 
     logger = setup_task_logger(**log_params)
     
-    cph = ConstantPH(**params)
+    # build OpenMM stuff here to avoid serializing SWIG objects (bad idea)
+    temp = temperature * kelvin
+    expl_params = dict(nonbondedMethod=PME,
+                       nonbondedCutoff=params['nonbonded_cutoff']*nanometers,
+                       constraints=HBonds,
+                       hydrogenMass=params['hmr']*amu)
+    impl_params = dict(nonbondedMethod=CutoffNonPeriodic,
+                                  nonbondedCutoff=params['implicit_cutoff']*nanometers,
+                                  constraints=HBonds)
+
+    reference_energies = params['referenceEnergies']
+    for key, vals in reference_energies.items():
+        reference_energies[key] = [val * kilojoules_per_mole for val in vals]
+
+    cph_params = {
+        'prmtop_file': params['prmtop_file'],
+        'inpcrd_file': params['inpcrd_file'],
+        'pH': params['pH'],
+        'relaxationSteps': params['relaxationSteps'],
+        'explicitArgs': expl_params,
+        'implicitArgs': impl_params,
+        'integrator': LangevinIntegrator(temp, 1./picosecond, 0.004*picosecond),
+        'relaxationIntegrator': LangevinIntegrator(temp, 10.0/picosecond, 0.002*picosecond),
+        'residueVariants': variants,
+        'referenceEnergies': reference_energies,
+    }
+
+    cph = ConstantPH(**cph_params)
     cph.simulation.minimizeEnergy()
     cph.simulation.context.setVelocitiesToTemperature(temperature)
 
@@ -116,6 +137,8 @@ class ConstantPHEnsemble:
                  log_dir: Path | list[Path],
                  pHs: list[float]=[x+0.5 for x in range(14)],
                  temperature: float=300.,
+                 platform: str='CUDA',
+                 properties: dict[str, str]={'Precision': 'mixed'},
                  parsl_config: Optional[Config]=None,
                  variant_sel: Optional[str]=None,):
         """Initialize the constant pH ensemble.
@@ -142,7 +165,7 @@ class ConstantPHEnsemble:
         self.pHs = pHs
         self.variant_sel = variant_sel
         
-        self.temperature = temperature * kelvin
+        self.temperature = temperature
 
         self.run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -204,18 +227,18 @@ class ConstantPHEnsemble:
         for residue in top.residues():
             if residue.name in names:
                 variants[residue.index] = _variants[residue.name]
-                reference_energies[residue.index] = [x * kilojoules_per_mole 
+                reference_energies[residue.index] = [x 
                                                      for x in self.ref_energies[residue.name]]
         
         u = mda.Universe(str(path / 'system.prmtop'), str(path / 'system.inpcrd'))
         sel = u.select_atoms('protein')
-        bad_keys = [sel[0].resid, sel[-1].resid] # termini
+        bad_keys = [sel[0].resindex, sel[-1].resindex] # termini
         
         if self.variant_sel is not None:
-            var = sel.select_atoms(self.variant_sel)
+            var = u.select_atoms(self.variant_sel)
             bad_keys = [resid 
-                        for resid in sel.residues.resids 
-                        if resid not in var.residues.resids]
+                        for resid in sel.residues.resindices 
+                        if resid not in var.residues.resindices]
 
         for bad_key in bad_keys:
             if bad_key in variants:
@@ -227,7 +250,8 @@ class ConstantPHEnsemble:
     
     def run(self,
             n_cycles: int=500,
-            n_steps: int=500) -> dict:
+            n_steps: int=500,
+            parsl_func: Callable=run_cph_sim) -> dict:
         """Run the constant pH simulation ensemble.
 
         Distributes simulation replicas across available resources using
@@ -263,7 +287,7 @@ class ConstantPHEnsemble:
             }
     
             futures.append(
-                run_cph_sim(cph_params, self.temperature, n_cycles, n_steps, log_params, str(path))
+                parsl_func(cph_params, self.temperature, n_cycles, n_steps, log_params, str(path))
             )
 
         results = {}
@@ -287,31 +311,14 @@ class ConstantPHEnsemble:
             ConstantPH simulation including file paths, pH values, integrators,
             and force field parameters for both explicit and implicit solvent.
         """
-        expl_params = dict(nonbondedMethod=PME,
-                           nonbondedCutoff=0.9*nanometers,
-                           constraints=HBonds,
-                           hydrogenMass=1.5*amu)
-
-        impl_params = dict(nonbondedMethod=CutoffNonPeriodic,
-                           nonbondedCutoff=2.0*nanometers,
-                           constraints=HBonds)
-
-        integrator = LangevinIntegrator(self.temperature,
-                                        1.0/picosecond,
-                                        0.004*picosecond)
-        relaxation_integrator = LangevinIntegrator(self.temperature,
-                                                   10.0/picosecond,
-                                                   0.002*picosecond)
-
         params = {
             'prmtop_file': path / 'system.prmtop',
             'inpcrd_file': path / 'system.inpcrd',
             'pH': self.pHs,
             'relaxationSteps': 1000,
-            'explicitArgs': expl_params,
-            'implicitArgs': impl_params,
-            'integrator': integrator,
-            'relaxationIntegrator': relaxation_integrator,
+            'nonbonded_cutoff': 0.9,
+            'hmr': 1.5,
+            'implicit_cutoff': 2.0,
         }
 
         return params

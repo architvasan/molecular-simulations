@@ -128,7 +128,7 @@ class ConstantPH:
         self.inpcrd_file = str(inpcrd_file)
 
         # Load AMBER topology and coordinates
-        print("Loading AMBER topology...")
+        print('Loading AMBER topology...')
         self.prmtop = AmberPrmtopFile(self.prmtop_file)
         self.inpcrd = AmberInpcrdFile(self.inpcrd_file)
 
@@ -147,8 +147,8 @@ class ConstantPH:
         # excludeResidues is no longer used - we keep lipids and ligands!
         # Only water and ions are stripped
         if excludeResidues is not None:
-            print("  Note: excludeResidues parameter is deprecated.")
-            print("        Lipids and ligands are now INCLUDED in MC evaluations.")
+            print('  Note: excludeResidues parameter is deprecated.')
+            print('        Lipids and ligands are now INCLUDED in MC evaluations.')
 
         # Set up implicit ForceField (for building protonation state params only)
         if implicitForceField is None:
@@ -163,26 +163,30 @@ class ConstantPH:
             self.titrations[resIndex] = ResidueTitration(variants, energies)
 
         # Build implicit system with lipids/ligands using ParmEd
-        print("Building implicit solvent system (includes lipids and ligands)...")
+        print('Building implicit solvent system (includes lipids and ligands)...')
         self._buildImplicitSystemWithParmEd()
 
         # Build protein-only topology for protonation state parameters
-        print("Building protein-only topology for protonation states...")
+        print('Building protein-only topology for protonation states...')
         self._buildProteinOnlyTopology(residueVariants)
 
         # Build protonation states for each titratable residue
-        print("Computing protonation state parameters...")
+        print('Computing protonation state parameters...')
         self._buildProtonationStates(residueVariants)
 
+        # Map protonation states to implicit system (fix force indices)
+        print('Mapping protonation states to implicit system...')
+        self._mapStatesToImplicitSystem()
+
         # Create the explicit system from AMBER topology
-        print("Creating explicit solvent system from AMBER topology...")
+        print('Creating explicit solvent system from AMBER topology...')
         self._buildExplicitSystem(integrator, relaxationIntegrator, platform, properties)
 
         # Map protonation states to explicit system
-        print("Mapping protonation states to explicit system...")
+        print('Mapping protonation states to explicit system...')
         self._mapStatesToExplicitSystem()
 
-        print("ConstantPHAmber initialization complete.")
+        print('ConstantPHAmber initialization complete.')
 
     def _buildImplicitSystemWithParmEd(self):
         """
@@ -253,7 +257,7 @@ class ConstantPH:
         elif self.gbModel == 'OBC2':
             implicitSolvent = OBC2
         else:
-            raise ValueError(f"Unknown GB model: {self.gbModel}. Use 'GBn2' or 'OBC2'.")
+            raise ValueError(f'Unknown GB model: {self.gbModel}. Use GBn2 or OBC2.')
 
         # Create implicit system with GB using ParmEd
         # This preserves all AMBER bonded parameters
@@ -278,13 +282,13 @@ class ConstantPH:
         n_lipid = sum(1 for r in stripped_parm.residues if r.name in {'PA', 'PC', 'PE', 'OL', 'GL'})
         n_other = len(stripped_parm.residues) - n_protein - n_lipid
 
-        print(f"  Stripped water and ions only")
-        print(f"  Implicit system: {len(stripped_parm.residues)} residues, "
-              f"{len(stripped_parm.atoms)} atoms")
-        print(f"    Protein: {n_protein} residues")
-        print(f"    Lipids: {n_lipid} residues (PA/PC/PE/OL/GL)")
-        print(f"    Other (ligands, etc.): {n_other} residues")
-        print(f"    GB model: {self.gbModel}")
+        print(f'  Stripped water and ions only')
+        print(f'  Implicit system: {len(stripped_parm.residues)} residues, '
+              f'{len(stripped_parm.atoms)} atoms')
+        print(f'    Protein: {n_protein} residues')
+        print(f'    Lipids: {n_lipid} residues (PA/PC/PE/OL/GL)')
+        print(f'    Other (ligands, etc.): {n_other} residues')
+        print(f'    GB model: {self.gbModel}')
 
     def _buildProteinOnlyTopology(self, residueVariants):
         """
@@ -320,8 +324,8 @@ class ConstantPH:
         self.proteinTopology = modeller.topology
         self.proteinPositions = modeller.positions
 
-        print(f"  Protein-only topology: {self.proteinTopology.getNumResidues()} residues, "
-              f"{self.proteinTopology.getNumAtoms()} atoms")
+        print(f'  Protein-only topology: {self.proteinTopology.getNumResidues()} residues, '
+              f'{self.proteinTopology.getNumAtoms()} atoms')
 
     def _buildProtonationStates(self, residueVariants):
         """
@@ -380,6 +384,64 @@ class ConstantPH:
                 [state.numHydrogens for state in titration.implicitStates]
             )
             titration.currentIndex = titration.protonatedIndex
+
+    def _mapStatesToImplicitSystem(self):
+        """Map protonation state force indices from ForceField system to ParmEd implicit system."""
+        # Find NonbondedForce and GBSAOBCForce indices in the ParmEd implicit system
+        implicitNBForceIdx = None
+        implicitGBForceIdx = None
+        for fi, force in enumerate(self.implicitSystem.getForces()):
+            if isinstance(force, NonbondedForce):
+                implicitNBForceIdx = fi
+            elif isinstance(force, GBSAOBCForce):
+                implicitGBForceIdx = fi
+
+        if implicitNBForceIdx is None:
+            raise RuntimeError('No NonbondedForce found in implicit system')
+
+        for resIndex, titration in self.titrations.items():
+            for state in titration.implicitStates:
+                # Find the NonbondedForce and GBSAOBCForce indices from the ForceField system
+                ffNBForceIdx = None
+                ffGBForceIdx = None
+                for fi in state.particleParameters:
+                    # We need to check what type of force this was in the ForceField system
+                    # Since we can't access the ForceField system here, we check by parameter structure
+                    params = state.particleParameters[fi]
+                    if params:
+                        # Get a sample parameter to determine force type
+                        sampleParam = next(iter(params.values()))
+                        if len(sampleParam) == 3:  # NonbondedForce: (charge, sigma, epsilon)
+                            ffNBForceIdx = fi
+                        elif len(sampleParam) == 2:  # GBSAOBCForce: (charge, radius) or (radius, scale)
+                            ffGBForceIdx = fi
+
+                # Remap particle parameters to use implicit system force indices
+                newParticleParams = {}
+                if ffNBForceIdx is not None and ffNBForceIdx in state.particleParameters:
+                    newParticleParams[implicitNBForceIdx] = state.particleParameters[ffNBForceIdx]
+                if ffGBForceIdx is not None and implicitGBForceIdx is not None and ffGBForceIdx in state.particleParameters:
+                    newParticleParams[implicitGBForceIdx] = state.particleParameters[ffGBForceIdx]
+
+                # Remap exception parameters
+                newExceptionParams = {}
+                if ffNBForceIdx is not None and ffNBForceIdx in state.exceptionParameters:
+                    newExceptionParams[implicitNBForceIdx] = state.exceptionParameters[ffNBForceIdx]
+
+                # Update the state
+                state.particleParameters = newParticleParams
+                state.exceptionParameters = newExceptionParams
+
+                # Update atom indices to use implicit system indices
+                implicitResIdx = self.explicitToImplicitResidueMap.get(resIndex)
+                if implicitResIdx is not None:
+                    implicitResidues = list(self.implicitTopology.residues())
+                    if implicitResIdx < len(implicitResidues):
+                        state.atomIndices = {
+                            atom.name: atom.index
+                            for atom in implicitResidues[implicitResIdx].atoms()
+                        }
+                        state.residueIndex = implicitResIdx
 
     def _findResidueStates(self, topology, positions, forcefield, variants, ffargs):
         """Build ResidueState objects for residues with specified variants."""
@@ -555,7 +617,7 @@ class ConstantPH:
                         break
 
                 if explicitNBForceIdx is None:
-                    raise RuntimeError("No NonbondedForce found in explicit system")
+                    raise RuntimeError('No NonbondedForce found in explicit system')
 
                 # Get implicit NonbondedForce index
                 implicitNBForceIdx = None
@@ -728,7 +790,7 @@ class ConstantPH:
                 for i, t in zip(stateIndex, titrations)
             ])
 
-            w = (newEnergy - currentEnergy - deltaRefEnergy) / kT + deltaN * np.log(10.0) * self.pH[self.currentPHIndex]
+            w = (newEnergy - currentEnergy - deltaRefEnergy) / kT - deltaN * np.log(10.0) * self.pH[self.currentPHIndex]
 
             if w > 0.0 and np.exp(-w) < np.random.random():
                 # Reject: restore previous state

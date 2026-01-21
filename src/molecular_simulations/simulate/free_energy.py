@@ -21,7 +21,7 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # Python 3.10
 import traceback
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Callable, Optional, Type, TypeVar
 from .omm_simulator import Simulator
 from .reporters import RCReporter
 
@@ -892,44 +892,44 @@ class EVB:
         self.dfk = None
         self._owns_parsl = False
 
-    def run_evb(self) -> None:
+    def run_evb(self,
+                parsl_func: Callable=run_evb_window) -> None:
         """Collect futures for each EVB window and distribute."""
-        # Spin up Parsl
-        self.initialize()
+        if self._owns_parsl:
+            self.initialize()
 
-        try:
-            futures = []
-            for i, rc0 in enumerate(self.reaction_coordinate):
-                umbrella = {**self.umbrella, 'rc0': rc0}
-                
-                futures.append(
-                    run_evb_window(
-                        topology=self.topology,
-                        coord_file=self.coordinates,
-                        out_path=self.path / f'window{i}',
-                        rc_file=self.log_path / f'{self.log_prefix}_{i}.log',
-                        umbrella_force=umbrella,
-                        morse_bond=self.morse_bond,
-                        rc_freq=self.rc_freq,
-                        steps=self.steps,
-                        dt=self.dt,
-                        platform=self.platform,
-                        restraint_sel=self.restraint_sel,
-                    )
+        futures = []
+        for i, rc0 in enumerate(self.reaction_coordinate):
+            umbrella = {**self.umbrella, 'rc0': rc0}
+            
+            futures.append(
+                parsl_func(
+                    topology=self.topology,
+                    coord_file=self.coordinates,
+                    out_path=self.path / f'window{i}',
+                    rc_file=self.log_path / f'{self.log_prefix}_{i}.log',
+                    umbrella_force=umbrella,
+                    morse_bond=self.morse_bond,
+                    rc_freq=self.rc_freq,
+                    steps=self.steps,
+                    dt=self.dt,
+                    platform=self.platform,
+                    restraint_sel=self.restraint_sel,
                 )
-
-            _ = [x.result() for x in futures]
-
-        except Exception as e:
-            tb = traceback.format_exc()
-            print(
-                'EVB failed for 1 or more windows!'
-                f'{e}'
-                f'{tb}'
             )
 
-        finally:
-            # Stop Parsl to avoid zombie processes
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                tb = traceback.format_exc()
+                print(
+                    'EVB failed for 1 or more windows!'
+                    f'{e}'
+                    f'{tb}'
+                )
+
+        if self._owns_parsl:
             self.shutdown()
     
     def process_evb_run(self) -> pl.DataFrame:
