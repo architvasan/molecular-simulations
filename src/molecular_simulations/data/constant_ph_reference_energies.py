@@ -30,14 +30,16 @@ def get_ref_energies(ff: str = 'amber19'):
     match ff.lower():
         case 'amber19':
             # Reference energies based on experimental pKa values at 300K
-            # E_protonated = kT * ln(10) * pKa = 2.494 * 2.303 * pKa
+            # pKa adjustment term = kT * ln(10) * pKa = 2.494 * 2.303 * pKa
+            # ref = (E_prot - E_deprot)_GB + pKa adjustment
+            # GB term accounts for implicit solvent contribution
             # This gives the correct equilibrium at each residue's pKa
             ref_energies = {
-                'CYS': [0.0, 47.68],    # pKa = 8.3
-                'ASP': [0.0, 22.40],    # pKa = 3.9
-                'GLU': [0.0, 24.70],    # pKa = 4.3
-                'LYS': [0.0, 60.32],    # pKa = 10.5
-                'HIS': [0.0, 37.34],    # pKa = 6.5 (2-state HID/HIP)
+                'CYS': [0.0, -275.17],    # pKa = 8.3
+                'ASP': [0.0, -107.17],    # pKa = 3.9
+                'GLU': [0.0, -96.32],    # pKa = 4.3
+                'LYS': [0.0, -26.72],    # pKa = 10.5
+                'HIS': [0.0, -60.43],    # pKa = 6.5 (2-state HID/HIP)
             }
         case _:
             raise ValueError(f'Forcefield {ff} not yet computed!')

@@ -219,7 +219,7 @@ class ConstantPHEnsemble:
             'ASP': ['ASH', 'ASP'],
             'GLU': ['GLH', 'GLU'],
             'LYS': ['LYS', 'LYN'],
-            'HIS': ['HIP', 'HID', 'HIE'],
+            'HIS': ['HIP', 'HID'],
         }
         names = list(_variants.keys())
         variants = {}

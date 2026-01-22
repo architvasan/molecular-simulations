@@ -52,8 +52,7 @@ class ReferenceEnergyFinder(object):
         energy1 = self.model.implicitContext.getState(getEnergy=True).getPotentialEnergy()
         deltaN = self.titration.implicitStates[1].numHydrogens - self.titration.implicitStates[0].numHydrogens
         scale = MOLAR_GAS_CONSTANT_R*self.temperature*deltaN*np.log(10.0)
-        self.titration.referenceEnergies[0] = 0.0*kilojoules_per_mole
-        self.titration.referenceEnergies[1] = energy1-energy0
+        self.titration.referenceEnergies = [0.0*kilojoules_per_mole, energy1-energy0]
         self.model.simulation.minimizeEnergy()
         self.model.simulation.context.setVelocitiesToTemperature(self.temperature)
 

@@ -568,7 +568,7 @@ class ConstantPH:
                 for key in protonatedExceptionParams:
                     if key not in stateExceptionParams:
                         originalParams = protonatedExceptionParams[key]
-                        stateExceptionParams[key] = (0.0,) + originalParams[1:]
+                        stateExceptionParams[key] = (0.0 * elementary_charge**2,) + originalParams[1:]
                 state.exceptionParameters[implicitNBForceIdx] = stateExceptionParams
 
     def _findResidueStates(self, topology, positions, forcefield, variants, ffargs):
@@ -827,7 +827,7 @@ class ConstantPH:
                     if key not in stateExceptionParams:
                         # Zero out the charge product for this exception
                         originalParams = protonatedExceptionParams[key]
-                        stateExceptionParams[key] = (0.0,) + originalParams[1:]
+                        stateExceptionParams[key] = (0.0 * elementary_charge**2,) + originalParams[1:]
 
                 # Update the state's parameters
                 state.particleParameters[explicitNBForceIdx] = stateParams
@@ -961,6 +961,17 @@ class ConstantPH:
         implicitPositions = explicitPositions[self.implicitAtomIndex]
         self.implicitContext.setPositions(implicitPositions)
 
+        if debug:
+            if np.any(np.isnan(implicitPositions)):
+                print(f"WARNING: NaN in implicit positions!")
+            testEnergy = self.implicitContext.getState(getEnergy=True).getPotentialEnergy()
+            if np.isnan(testEnergy.value_in_unit(kilojoules_per_mole)):
+                print(f"WARNING: Implicit context energy is NaN after setting positions!")
+                print(f"  Explicit pos has NaN: {np.any(np.isnan(explicitPositions))}")
+                print(f"  Implicit pos has NaN: {np.any(np.isnan(implicitPositions))}")
+                print(f"  implicitAtomIndex range: {self.implicitAtomIndex.min()}-{self.implicitAtomIndex.max()}")
+                print(f"  explicitPositions shape: {explicitPositions.shape}")
+
         periodicDistance = compiled.periodicDistance(
             state.getPeriodicBoxVectors().value_in_unit(nanometers)
         )
@@ -1001,9 +1012,9 @@ class ConstantPH:
             kT = MOLAR_GAS_CONSTANT_R * temperature
 
             deltaRefEnergy = sum([
-                t.referenceEnergies[i] - t.referenceEnergies[t.currentIndex]
+                (t.referenceEnergies[i] - t.referenceEnergies[t.currentIndex]) * kilojoules_per_mole
                 for i, t in zip(stateIndex, titrations)
-            ]) * kilojoules_per_mole
+            ], 0.0 * kilojoules_per_mole)
             deltaN = sum([
                 t.implicitStates[i].numHydrogens - t.implicitStates[t.currentIndex].numHydrogens
                 for i, t in zip(stateIndex, titrations)
@@ -1012,15 +1023,23 @@ class ConstantPH:
             w = (newEnergy - currentEnergy - deltaRefEnergy) / kT + deltaN * np.log(10.0) * self.pH[self.currentPHIndex]
 
             if debug:
-                dE = (newEnergy - currentEnergy).value_in_unit(kilojoules_per_mole)
+                currE = currentEnergy.value_in_unit(kilojoules_per_mole)
+                newE = newEnergy.value_in_unit(kilojoules_per_mole)
+                dE = newE - currE
                 dRef = deltaRefEnergy.value_in_unit(kilojoules_per_mole)
-                print(f"  Residue {titrations[0].implicitStates[0].residueIndex}: "
-                      f"state {titrations[0].currentIndex}->{stateIndex[0]}, "
-                      f"deltaN={deltaN}, pH={self.pH[self.currentPHIndex]:.2f}, "
-                      f"dE={dE:.2f} kJ/mol, "
-                      f"dRef={dRef:.2f} kJ/mol, "
-                      f"w={float(w):.3f}, "
-                      f"accept={'yes' if w <= 0 else f'prob={np.exp(-float(w)):.4f}'}")
+
+                if np.isnan(dE) or np.isnan(dRef):
+                    print(f"  Residue {titrations[0].implicitStates[0].residueIndex}: "
+                          f"NaN DETECTED! currE={currE}, newE={newE}, "
+                          f"refs=[{titrations[0].referenceEnergies}]")
+                else:
+                    print(f"  Residue {titrations[0].implicitStates[0].residueIndex}: "
+                          f"state {titrations[0].currentIndex}->{stateIndex[0]}, "
+                          f"deltaN={deltaN}, pH={self.pH[self.currentPHIndex]:.2f}, "
+                          f"dE={dE:.2f} kJ/mol, "
+                          f"dRef={dRef:.2f} kJ/mol, "
+                          f"w={float(w):.3f}, "
+                          f"accept={'yes' if w <= 0 else f'prob={np.exp(-float(w)):.4f}'}")
 
             if w > 0.0 and np.exp(-w) < np.random.random():
                 # Reject: restore previous state
@@ -1138,7 +1157,10 @@ class ConstantPH:
                     p1, p2, _, sigma, epsilon = force.getExceptionParameters(index)
                     q1, _, _ = force.getParticleParameters(p1)
                     q2, _, _ = force.getParticleParameters(p2)
-                    force.setExceptionParameters(index, p1, p2, coulomb14Scale * q1 * q2, sigma, epsilon)
+                    q1_val = q1.value_in_unit(elementary_charge) if hasattr(q1, 'value_in_unit') else float(q1)
+                    q2_val = q2.value_in_unit(elementary_charge) if hasattr(q2, 'value_in_unit') else float(q2)
+                    chargeProd = coulomb14Scale * q1_val * q2_val * elementary_charge**2
+                    force.setExceptionParameters(index, p1, p2, chargeProd, sigma, epsilon)
 
             # Update parameters in context for this force
             # Note: no need to call context.reinitialize() - updateParametersInContext is sufficient
