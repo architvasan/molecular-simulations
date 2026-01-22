@@ -1890,7 +1890,7 @@ class TestApplyStateToContext:
         nb_force.addParticle(-0.4, 0.17, 0.0)  # N
         nb_force.addParticle(0.2, 0.05, 0.0)   # H
         nb_force.addParticle(0.2, 0.17, 0.0)   # C
-        nb_force.addException(0, 1, 0.0, 0.1, 0.0)  # N-H exception
+        nb_force.addException(0, 1, 0.02, 0.1, 0.0)  # N-H exception (non-zero chargeProd)
         system.addForce(nb_force)
 
         # Create context

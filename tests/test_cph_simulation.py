@@ -53,8 +53,8 @@ class TestConstantPHEnsembleInit:
             # Default pH range is 0.5 to 13.5 in 1.0 increments
             assert len(ensemble.pHs) == 14
             assert ensemble.pHs[0] == 0.5
-            # Temperature should be 300K by default
-            assert ensemble.temperature == 300.0 * kelvin
+            # Temperature should be 300K by default (stored as float, not Quantity)
+            assert ensemble.temperature == 300.0
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     def test_ensemble_init_custom_phs(self, mock_parsl: MagicMock) -> None:
@@ -104,7 +104,7 @@ class TestConstantPHEnsembleInit:
                 temperature=310.0,
             )
 
-            assert ensemble.temperature == 310.0 * kelvin
+            assert ensemble.temperature == 310.0
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     def test_ensemble_init_with_variant_sel(self, mock_parsl: MagicMock) -> None:
@@ -273,17 +273,14 @@ class TestConstantPHEnsembleParams:
             assert 'inpcrd_file' in params
             assert 'pH' in params
             assert 'relaxationSteps' in params
-            assert 'explicitArgs' in params
-            assert 'implicitArgs' in params
-            assert 'integrator' in params
-            assert 'relaxationIntegrator' in params
+            assert 'nonbonded_cutoff' in params
+            assert 'hmr' in params
+            assert 'implicit_cutoff' in params
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     def test_params_explicit_args(self, mock_parsl: MagicMock) -> None:
         """Test params contains correct explicit solvent arguments."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm.app import PME, HBonds
-        from openmm.unit import nanometers, amu
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -301,18 +298,14 @@ class TestConstantPHEnsembleParams:
 
             params = ensemble.get_params(path)
 
-            expl_args = params['explicitArgs']
-            assert expl_args['nonbondedMethod'] == PME
-            assert expl_args['nonbondedCutoff'] == 0.9 * nanometers
-            assert expl_args['constraints'] == HBonds
-            assert expl_args['hydrogenMass'] == 1.5 * amu
+            # Check explicit solvent parameters
+            assert params['nonbonded_cutoff'] == 0.9
+            assert params['hmr'] == 1.5
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     def test_params_implicit_args(self, mock_parsl: MagicMock) -> None:
         """Test params contains correct implicit solvent arguments."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm.app import CutoffNonPeriodic, HBonds
-        from openmm.unit import nanometers
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -330,10 +323,8 @@ class TestConstantPHEnsembleParams:
 
             params = ensemble.get_params(path)
 
-            impl_args = params['implicitArgs']
-            assert impl_args['nonbondedMethod'] == CutoffNonPeriodic
-            assert impl_args['nonbondedCutoff'] == 2.0 * nanometers
-            assert impl_args['constraints'] == HBonds
+            # Check implicit solvent parameters
+            assert params['implicit_cutoff'] == 2.0
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     def test_params_ph_values(self, mock_parsl: MagicMock) -> None:
@@ -361,10 +352,9 @@ class TestConstantPHEnsembleParams:
             assert params['pH'] == custom_phs
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
-    def test_params_integrator_temperature(self, mock_parsl: MagicMock) -> None:
-        """Test params integrator uses correct temperature."""
+    def test_params_with_custom_temperature(self, mock_parsl: MagicMock) -> None:
+        """Test ensemble stores custom temperature correctly."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm.unit import kelvin
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -381,12 +371,8 @@ class TestConstantPHEnsembleParams:
                 temperature=310.0,
             )
 
-            params = ensemble.get_params(path)
-
-            # Integrator should use the ensemble temperature
-            integrator = params['integrator']
-            # Temperature is the first argument to LangevinIntegrator
-            assert integrator.getTemperature() == 310.0 * kelvin
+            # Temperature is stored on the ensemble object
+            assert ensemble.temperature == 310.0
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     def test_params_relaxation_steps(self, mock_parsl: MagicMock) -> None:
@@ -437,13 +423,12 @@ class TestConstantPHEnsembleParams:
 
 
 class TestConstantPHEnsembleTemperatureHandling:
-    """Test suite for temperature unit handling."""
+    """Test suite for temperature handling."""
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
-    def test_temperature_stored_with_units(self, mock_parsl: MagicMock) -> None:
-        """Test that temperature is stored with kelvin units."""
+    def test_temperature_stored_as_float(self, mock_parsl: MagicMock) -> None:
+        """Test that temperature is stored as a float value in Kelvin."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm.unit import kelvin
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -460,10 +445,9 @@ class TestConstantPHEnsembleTemperatureHandling:
                 temperature=300.0,
             )
 
-            # Temperature should have kelvin units
-            assert ensemble.temperature == 300.0 * kelvin
-            # Can convert to numeric value
-            assert ensemble.temperature.value_in_unit(kelvin) == 300.0
+            # Temperature is stored as a float (assumed to be in Kelvin)
+            assert ensemble.temperature == 300.0
+            assert isinstance(ensemble.temperature, float)
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     @pytest.mark.parametrize("temp", [273.15, 300.0, 310.0, 350.0])
@@ -472,7 +456,6 @@ class TestConstantPHEnsembleTemperatureHandling:
     ) -> None:
         """Test temperature handling with various physiological temperatures."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm.unit import kelvin
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -489,7 +472,7 @@ class TestConstantPHEnsembleTemperatureHandling:
                 temperature=temp,
             )
 
-            assert ensemble.temperature.value_in_unit(kelvin) == temp
+            assert ensemble.temperature == temp
 
 
 class TestConstantPHEnsembleMultiplePaths:
@@ -652,13 +635,12 @@ class TestConstantPHEnsemblePHRange:
 
 
 class TestConstantPHEnsembleIntegrators:
-    """Test suite for integrator configuration."""
+    """Test suite for simulation configuration."""
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
-    def test_integrator_created(self, mock_parsl: MagicMock) -> None:
-        """Test that main integrator is created correctly."""
+    def test_relaxation_steps_in_params(self, mock_parsl: MagicMock) -> None:
+        """Test that relaxationSteps is included in params."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm import LangevinIntegrator
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -676,14 +658,13 @@ class TestConstantPHEnsembleIntegrators:
 
             params = ensemble.get_params(path)
 
-            assert params['integrator'] is not None
-            assert isinstance(params['integrator'], LangevinIntegrator)
+            assert 'relaxationSteps' in params
+            assert params['relaxationSteps'] == 1000
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
-    def test_relaxation_integrator_created(self, mock_parsl: MagicMock) -> None:
-        """Test that relaxation integrator is created correctly."""
+    def test_hmr_in_params(self, mock_parsl: MagicMock) -> None:
+        """Test that hydrogen mass repartitioning is included in params."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm import LangevinIntegrator
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -701,16 +682,13 @@ class TestConstantPHEnsembleIntegrators:
 
             params = ensemble.get_params(path)
 
-            assert params['relaxationIntegrator'] is not None
-            assert isinstance(params['relaxationIntegrator'], LangevinIntegrator)
+            assert 'hmr' in params
+            assert params['hmr'] == 1.5
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
-    def test_integrators_use_ensemble_temperature(
-        self, mock_parsl: MagicMock
-    ) -> None:
-        """Test both integrators use the ensemble temperature."""
+    def test_cutoffs_in_params(self, mock_parsl: MagicMock) -> None:
+        """Test that cutoff parameters are included in params."""
         from molecular_simulations.simulate.cph_simulation import ConstantPHEnsemble
-        from openmm.unit import kelvin
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
@@ -724,14 +702,12 @@ class TestConstantPHEnsembleIntegrators:
                 reference_energies=ref_energies,
                 parsl_config=mock_config,
                 log_dir=log_dir,
-                temperature=320.0,
             )
 
             params = ensemble.get_params(path)
 
-            # Both integrators should use 320K
-            assert params['integrator'].getTemperature() == 320.0 * kelvin
-            assert params['relaxationIntegrator'].getTemperature() == 320.0 * kelvin
+            assert params['nonbonded_cutoff'] == 0.9
+            assert params['implicit_cutoff'] == 2.0
 
 
 class TestConstantPHEnsembleVariantSel:
@@ -910,23 +886,22 @@ class TestConstantPHEnsembleBuildDicts:
         # Setup mock MDAnalysis
         mock_universe = MagicMock()
         mock_protein_sel = MagicMock()
-        mock_protein_sel.residues.resids = [1, 5, 10, 20]
+        mock_protein_sel.residues.resindices = [1, 5, 10, 20]
         mock_protein_sel.__getitem__ = MagicMock(side_effect=[
-            MagicMock(resid=1),
-            MagicMock(resid=20),
+            MagicMock(resindex=1),
+            MagicMock(resindex=20),
         ])
 
-        # Mock variant selection that only includes resid 5
+        # Mock variant selection that only includes resindex 5
         mock_var_sel = MagicMock()
-        mock_var_sel.residues.resids = [5]
+        mock_var_sel.residues.resindices = [5]
 
         def select_side_effect(selection):
             if 'resid 5' in selection:
                 return mock_var_sel
             return mock_protein_sel
 
-        mock_protein_sel.select_atoms.side_effect = select_side_effect
-        mock_universe.select_atoms.return_value = mock_protein_sel
+        mock_universe.select_atoms.side_effect = select_side_effect
         mock_mda.Universe.return_value = mock_universe
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1006,7 +981,7 @@ class TestConstantPHEnsembleRun:
                             'relaxationIntegrator': MagicMock(),
                         }
 
-                        ensemble.run(n_cycles=10, n_steps=100)
+                        ensemble.run(n_cycles=10, n_steps=100, parsl_func=mock_run_cph_sim)
 
             # Should call run_cph_sim for each path
             assert mock_run_cph_sim.call_count == 3
@@ -1056,7 +1031,7 @@ class TestConstantPHEnsembleRun:
                             'relaxationIntegrator': MagicMock(),
                         }
 
-                        ensemble.run(n_cycles=250, n_steps=750)
+                        ensemble.run(n_cycles=250, n_steps=750, parsl_func=mock_run_cph_sim)
 
             call_args = mock_run_cph_sim.call_args
             assert call_args[0][2] == 250  # n_cycles
@@ -1109,8 +1084,8 @@ class TestConstantPHEnsembleRunWithDefaults:
                             'relaxationIntegrator': MagicMock(),
                         }
 
-                        # Call without arguments to use defaults
-                        ensemble.run()
+                        # Call with parsl_func to use mocked function
+                        ensemble.run(parsl_func=mock_run_cph_sim)
 
             call_args = mock_run_cph_sim.call_args
             assert call_args[0][2] == 500  # default n_cycles
@@ -1167,7 +1142,7 @@ class TestConstantPHEnsembleLogParams:
                             'relaxationIntegrator': MagicMock(),
                         }
 
-                        ensemble.run(n_cycles=10, n_steps=100)
+                        ensemble.run(n_cycles=10, n_steps=100, parsl_func=mock_run_cph_sim)
 
             # Check each call had unique task_id
             task_ids = []

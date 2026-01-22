@@ -118,6 +118,25 @@ class ConstantPH:
     WATER_ION_NAMES = {'HOH', 'WAT', 'Na+', 'Cl-', 'NA', 'CL', 'K+', 'K',
                        'SOD', 'CLA', 'POT', 'OPC', 'TIP3', 'SPC'}
 
+    # Titratable hydrogen differences: maps (deprotonated, protonated) variant pairs
+    # to the number of hydrogens LOST when going from protonated to deprotonated
+    TITRATION_H_DIFF = {
+        # Aspartate: ASH (protonated) -> ASP (deprotonated), loses 1 H
+        ('ASP', 'ASH'): -1, ('ASH', 'ASP'): 1,
+        # Glutamate: GLH (protonated) -> GLU (deprotonated), loses 1 H
+        ('GLU', 'GLH'): -1, ('GLH', 'GLU'): 1,
+        # Histidine: HIP (doubly protonated) -> HID/HIE (singly protonated)
+        ('HID', 'HIP'): -1, ('HIP', 'HID'): 1,
+        ('HIE', 'HIP'): -1, ('HIP', 'HIE'): 1,
+        ('HID', 'HIE'): 0, ('HIE', 'HID'): 0,  # Same H count, different position
+        # Lysine: LYS (protonated) -> LYN (neutral), loses 1 H
+        ('LYN', 'LYS'): -1, ('LYS', 'LYN'): 1,
+        # Cysteine: CYS (protonated thiol) -> CYM (deprotonated thiolate)
+        ('CYM', 'CYS'): -1, ('CYS', 'CYM'): 1,
+        # Tyrosine: TYR (protonated) -> TYD (deprotonated phenolate)
+        ('TYD', 'TYR'): -1, ('TYR', 'TYD'): 1,
+    }
+
     def __init__(self, prmtop_file, inpcrd_file, pH, residueVariants, referenceEnergies,
                  relaxationSteps, explicitArgs, implicitArgs, integrator,
                  relaxationIntegrator, implicitForceField=None, excludeResidues=None,
@@ -378,12 +397,67 @@ class ConstantPH:
 
             variantIndex += 1
 
-        # Identify the fully protonated state for each titration
-        for titration in self.titrations.values():
-            titration.protonatedIndex = np.argmax(
-                [state.numHydrogens for state in titration.implicitStates]
-            )
+        # Identify the fully protonated state and fix numHydrogens for each titration
+        # This is necessary because AMBER prmtops already have hydrogens, so addHydrogens
+        # may not correctly adjust the topology for different variants
+        for resIndex, titration in self.titrations.items():
+            variants = titration.variants
+
+            # Find the protonated state based on variant name conventions
+            protonatedIdx = self._identifyProtonatedState(variants)
+            titration.protonatedIndex = protonatedIdx
+
+            # Get baseline hydrogen count from the protonated state
+            baselineH = titration.implicitStates[protonatedIdx].numHydrogens
+
+            # Update numHydrogens for each state based on variant differences
+            protonatedVariant = variants[protonatedIdx]
+            for i, (state, variant) in enumerate(zip(titration.implicitStates, variants)):
+                if i == protonatedIdx:
+                    continue
+                # Calculate H difference from protonated state
+                key = (variant, protonatedVariant)
+                if key in self.TITRATION_H_DIFF:
+                    hDiff = self.TITRATION_H_DIFF[key]
+                    state.numHydrogens = baselineH + hDiff
+                    if state.numHydrogens != titration.implicitStates[protonatedIdx].numHydrogens:
+                        print(f'  Res {resIndex}: {variant} has {state.numHydrogens} H '
+                              f'(vs {baselineH} for {protonatedVariant})')
+
             titration.currentIndex = titration.protonatedIndex
+
+    def _identifyProtonatedState(self, variants):
+        """Identify which variant index corresponds to the fully protonated state.
+
+        For standard titratable residues:
+        - ASH > ASP (ASH is protonated aspartate)
+        - GLH > GLU (GLH is protonated glutamate)
+        - HIP > HID, HIE (HIP is doubly protonated histidine)
+        - LYS > LYN (LYS is protonated lysine)
+        - CYS > CYM (CYS has the thiol proton)
+        - TYR > TYD (TYR has the phenolic proton)
+        """
+        # Protonated forms (higher proton count)
+        PROTONATED_FORMS = {'ASH', 'GLH', 'HIP', 'LYS', 'CYS', 'TYR'}
+        # Deprotonated forms (lower proton count)
+        DEPROTONATED_FORMS = {'ASP', 'GLU', 'HID', 'HIE', 'LYN', 'CYM', 'TYD'}
+
+        # Find the variant with the most protons
+        for i, variant in enumerate(variants):
+            if variant in PROTONATED_FORMS:
+                return i
+
+        # If no protonated form found, check for intermediate forms
+        # For histidine: HID and HIE are equally protonated (singly)
+        for i, variant in enumerate(variants):
+            if variant in {'HID', 'HIE'}:
+                return i
+
+        # Fallback: assume first variant is protonated
+        # (This handles custom residue types)
+        print(f'  Warning: Could not identify protonated state for variants {variants}, '
+              f'assuming index 0')
+        return 0
 
     def _mapStatesToImplicitSystem(self):
         """Map protonation state force indices from ForceField system to ParmEd implicit system.
@@ -823,7 +897,52 @@ class ConstantPH:
         """Current simulated tempering weights."""
         return [x - self._weights[0] for x in self._weights]
 
-    def attemptMCStep(self, temperature):
+    def printTitrationState(self):
+        """Print current state of all titrations for debugging."""
+        print(f"Current pH: {self.pH[self.currentPHIndex]:.2f}")
+        print(f"Titratable residues: {len(self.titrations)}")
+        for resIndex, titration in self.titrations.items():
+            current = titration.currentIndex
+            protonated = titration.protonatedIndex
+            print(f"  Res {resIndex}: currentState={current}, protonatedIdx={protonated}")
+            print(f"    variants={titration.variants}")
+            print(f"    refEnergies={titration.referenceEnergies}")
+            for i, (impl, expl) in enumerate(zip(titration.implicitStates, titration.explicitStates)):
+                print(f"    state[{i}]: implicitH={impl.numHydrogens}, explicitH={expl.numHydrogens}, "
+                      f"implAtoms={len(impl.atomIndices)}, explAtoms={len(expl.atomIndices)}")
+
+    def validateStates(self):
+        """Validate that titration states are properly set up."""
+        issues = []
+        for resIndex, titration in self.titrations.items():
+            # Check we have the right number of states
+            if len(titration.implicitStates) != len(titration.variants):
+                issues.append(f"Res {resIndex}: {len(titration.implicitStates)} implicit states but {len(titration.variants)} variants")
+            if len(titration.explicitStates) != len(titration.variants):
+                issues.append(f"Res {resIndex}: {len(titration.explicitStates)} explicit states but {len(titration.variants)} variants")
+
+            # Check numHydrogens differs between states
+            implicitHydrogens = [s.numHydrogens for s in titration.implicitStates]
+            explicitHydrogens = [s.numHydrogens for s in titration.explicitStates]
+            if len(set(implicitHydrogens)) == 1:
+                issues.append(f"Res {resIndex}: all implicit states have same numHydrogens={implicitHydrogens[0]}")
+            if len(set(explicitHydrogens)) == 1:
+                issues.append(f"Res {resIndex}: all explicit states have same numHydrogens={explicitHydrogens[0]}")
+
+            # Check protonated index makes sense
+            if titration.protonatedIndex >= len(titration.implicitStates):
+                issues.append(f"Res {resIndex}: protonatedIndex={titration.protonatedIndex} out of range")
+
+        if issues:
+            print("State validation FAILED:")
+            for issue in issues:
+                print(f"  - {issue}")
+            return False
+        else:
+            print("State validation PASSED")
+            return True
+
+    def attemptMCStep(self, temperature, debug=False):
         """
         Attempt Monte Carlo moves to change protonation states.
 
@@ -831,6 +950,8 @@ class ConstantPH:
         ----------
         temperature : float or Quantity
             Simulation temperature
+        debug : bool
+            If True, print debugging information about MC moves
         """
         # Copy positions to implicit context
         state = self.simulation.context.getState(getPositions=True, getParameters=True)
@@ -879,16 +1000,27 @@ class ConstantPH:
                 temperature = temperature * kelvin
             kT = MOLAR_GAS_CONSTANT_R * temperature
 
-            deltaRefEnergy = unitsum([
+            deltaRefEnergy = sum([
                 t.referenceEnergies[i] - t.referenceEnergies[t.currentIndex]
                 for i, t in zip(stateIndex, titrations)
-            ])
-            deltaN = unitsum([
+            ]) * kilojoules_per_mole
+            deltaN = sum([
                 t.implicitStates[i].numHydrogens - t.implicitStates[t.currentIndex].numHydrogens
                 for i, t in zip(stateIndex, titrations)
             ])
 
             w = (newEnergy - currentEnergy - deltaRefEnergy) / kT + deltaN * np.log(10.0) * self.pH[self.currentPHIndex]
+
+            if debug:
+                dE = (newEnergy - currentEnergy).value_in_unit(kilojoules_per_mole)
+                dRef = deltaRefEnergy.value_in_unit(kilojoules_per_mole)
+                print(f"  Residue {titrations[0].implicitStates[0].residueIndex}: "
+                      f"state {titrations[0].currentIndex}->{stateIndex[0]}, "
+                      f"deltaN={deltaN}, pH={self.pH[self.currentPHIndex]:.2f}, "
+                      f"dE={dE:.2f} kJ/mol, "
+                      f"dRef={dRef:.2f} kJ/mol, "
+                      f"w={float(w):.3f}, "
+                      f"accept={'yes' if w <= 0 else f'prob={np.exp(-float(w)):.4f}'}")
 
             if w > 0.0 and np.exp(-w) < np.random.random():
                 # Reject: restore previous state
