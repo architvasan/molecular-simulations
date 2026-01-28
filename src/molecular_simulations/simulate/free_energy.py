@@ -841,7 +841,7 @@ class EVB:
             p1 = a1.positions
             p2 = a2.positions
             
-            rc_min = np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)
+            rc_min = (np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)) * 0.1 # to nm
             rc_interval = np.abs(rc_min * 2) / self.n_windows
             rc = [rc_min, rc_min * -1 + rc_interval, rc_interval]
 

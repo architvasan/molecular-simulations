@@ -1012,7 +1012,7 @@ class ConstantPH:
             kT = MOLAR_GAS_CONSTANT_R * temperature
 
             deltaRefEnergy = sum([
-                (t.referenceEnergies[i] - t.referenceEnergies[t.currentIndex]) * kilojoules_per_mole
+                t.referenceEnergies[i] - t.referenceEnergies[t.currentIndex]
                 for i, t in zip(stateIndex, titrations)
             ], 0.0 * kilojoules_per_mole)
             deltaN = sum([

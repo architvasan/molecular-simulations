@@ -215,11 +215,11 @@ class ConstantPHEnsemble:
             free energies in kJ/mol.
         """
         _variants = {
-            'CYS': ['CYS', 'CYX'],
-            'ASP': ['ASH', 'ASP'],
-            'GLU': ['GLH', 'GLU'],
-            'LYS': ['LYS', 'LYN'],
-            'HIS': ['HIP', 'HID'],
+            'CYS': ['CYX', 'CYS'],
+            'ASP': ['ASP', 'ASH'],
+            'GLU': ['GLU', 'GLH'],
+            'LYS': ['LYN', 'LYS'],
+            'HIS': ['HID', 'HIP'],
         }
         names = list(_variants.keys())
         variants = {}

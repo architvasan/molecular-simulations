@@ -10,11 +10,10 @@ import numpy as np
 from numpy import vectorize
 from pathlib import Path
 import polars as pl
-from typing import Any, Union
+from typing import Any, Literal, Union
 
 PathLike = Union[Path, str]
 OptPath = Union[Path, str, None]
-
 
 class ipSAE:
     """Compute interaction prediction Score from Aligned Errors.
@@ -47,7 +46,7 @@ class ipSAE:
         structure_file: PathLike,
         plddt_file: PathLike,
         pae_file: PathLike,
-        out_path: OptPath = None
+        out_path: OptPath = None,
     ):
         """Initialize the ipSAE scorer.
 
@@ -88,7 +87,7 @@ class ipSAE:
         self.scorer = ScoreCalculator(
             chains=chains,
             chain_pair_type=chain_types,
-            n_residues=residue_types
+            n_residues=residue_types.shape[0]
         )
 
     def run(self) -> None:
@@ -132,7 +131,6 @@ class ipSAE:
         """
         data = np.load(str(self.pae_file))['pae']
         return data
-
 
 class ScoreCalculator:
     """Calculate model quality scores from structure predictions.

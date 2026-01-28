@@ -1172,20 +1172,10 @@ class FileHandler:
         cpptraj_in = [
             f'parm {self.top}', 
             f'trajin {self.traj}',
-            f'trajout {self.traj.with_suffix(".crd")} crd {frame_control}',
-            'run',
-            'clear all',
-        ]
-
-        self.traj = self.traj.with_suffix('.crd')
-
-        cpptraj_in += [
-            f'parm {self.top}', 
-            f'trajin {self.traj}',
             'strip :WAT,Na+,Cl*',
             'autoimage',
-            f'rmsd !(:WAT,Cl*,CIO,Cs+,IB,K*,Li+,MG*,Na+,Rb+,CS,RB,NA,F,CL) mass first',
-            f'trajout {self.trajectories[0]} crd nobox',
+            'rmsd !(:WAT,Cl*,CIO,Cs+,IB,K*,Li+,MG*,Na+,Rb+,CS,RB,NA,F,CL) mass first',
+            f'trajout {self.trajectories[0]} crd {frame_control}',
             f'trajout {self.pdbs[0]} pdb onlyframes 1',
             'run',
             'clear all',

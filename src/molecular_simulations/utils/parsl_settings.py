@@ -40,7 +40,7 @@ class LocalSettings(BaseComputeSettings):
     worker_init: str = ''
     nodes: int = 1
     retries: int = 1
-    label: str = 'htex'
+    label: str = 'gpu'
     worker_port_range: Tuple[int, int] = (10000, 20000)
 
     def config_factory(self,
@@ -73,7 +73,7 @@ class LocalCPUSettings(BaseComputeSettings):
     max_workers_per_node: int = 1
     cores_per_worker: float = 1.0
     retries: int = 1
-    label: str = 'htex'
+    label: str = 'cpu'
     worker_port_range: Tuple[int, int] = (10000, 20000)
     available_accelerators: Union[int, Sequence[str]] = []
 
@@ -89,7 +89,7 @@ class LocalCPUSettings(BaseComputeSettings):
                         init_blocks=1, 
                         max_blocks=1,
                         launcher=MpiExecLauncher(
-                            bind_cmd='--cpu-bind depth', overrides='--depth=1 --ppn 1'
+                            bind_cmd='--cpu-bind', overrides='--depth=1 --ppn 1'
                         ),
                         worker_init=self.worker_init,
                     ),
