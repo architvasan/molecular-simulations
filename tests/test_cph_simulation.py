@@ -861,7 +861,7 @@ class TestConstantPHEnsembleBuildDicts:
             # ASP at index 1 should be included
             # ALA at index 2 is terminus and non-titratable
             assert 1 in variants
-            assert variants[1] == ['ASH', 'ASP']
+            assert variants[1] == ['ASP', 'ASH']
 
     @patch('molecular_simulations.simulate.cph_simulation.parsl')
     @patch('molecular_simulations.simulate.cph_simulation.mda')

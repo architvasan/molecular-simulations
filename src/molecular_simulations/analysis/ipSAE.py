@@ -7,10 +7,10 @@ from structure prediction tools like Boltz and AlphaFold.
 
 from itertools import permutations
 import numpy as np
-from numpy import vectorize
 from pathlib import Path
 import polars as pl
-from typing import Any, Literal, Union
+from scipy.spatial.distance import cdist
+from typing import Any, Union
 
 PathLike = Union[Path, str]
 OptPath = Union[Path, str, None]
@@ -42,7 +42,7 @@ class ipSAE:
     """
 
     def __init__(
-        self, 
+        self,
         structure_file: PathLike,
         plddt_file: PathLike,
         pae_file: PathLike,
@@ -98,8 +98,7 @@ class ipSAE:
         """
         self.parse_structure_file()
 
-        distances = self.coordinates[:, np.newaxis, :] - self.coordinates[np.newaxis, :, :]
-        distances = np.sqrt((distances ** 2).sum(axis=2))
+        distances = cdist(self.coordinates, self.coordinates)
         pLDDT = self.load_pLDDT_file()
         PAE = self.load_PAE_file()
 
@@ -149,7 +148,7 @@ class ScoreCalculator:
     Args:
         chains: Array of chain IDs.
         chain_pair_type: Dictionary mapping chain ID to chain type
-            ('protein' or 'nucleic').
+            ('protein' or 'nucleic_acid').
         n_residues: Number of residues per chain.
         pdockq_cutoff: Distance cutoff for pDockQ in Angstroms.
             Defaults to 8.0.
@@ -220,11 +219,11 @@ class ScoreCalculator:
             results.append([chain1, chain2, pDockQ, pDockQ2, LIS, ipTM, ipSAE])
 
         self.df = pl.DataFrame(
-            np.array(results), 
+            np.array(results),
             schema={
-                'chain1': str, 
-                'chain2': str, 
-                'pDockQ': float, 
+                'chain1': str,
+                'chain2': str,
+                'pDockQ': float,
                 'pDockQ2': float,
                 'LIS': float,
                 'ipTM': float,
@@ -250,35 +249,32 @@ class ScoreCalculator:
         Returns:
             Tuple of (pDockQ, pDockQ2) scores.
         """
-        n_pairs = 0
-        _sum = 0.
-        residues = set()
-        for i in range(self.n_res):
-            if self.chains[i] == chain1:
-                continue
+        mask_c1 = self.chains == chain1
+        mask_c2 = self.chains == chain2
 
-            valid_pairs = (self.chains == chain2) & (self.distances[i] <= self.pDockQ_cutoff)
-            n_pairs += np.sum(valid_pairs)
-            if valid_pairs.any():
-                residues.add(i)
-                chain2_residues = np.where(valid_pairs)[0]
-                pae_list = self.PAE[i][valid_pairs]
-                pae_list_ptm = self.compute_pTM(pae_list, 10.)
-                _sum += pae_list_ptm.sum()
+        dist_sub = self.distances[np.ix_(mask_c1, mask_c2)]
+        contact = dist_sub <= self.pDockQ_cutoff
+        n_pairs = np.sum(contact)
 
-                for residue in chain2_residues:
-                    residues.add(residue)
+        if n_pairs == 0:
+            return 0., 0.
 
-        if n_pairs > 0:
-            residues = list(residues)
-            n_res = len(residues)
-            mean_pLDDT = self.pLDDT[residues].mean()
-            x = mean_pLDDT * np.log10(n_pairs)
-            pDockQ = self.pDockQ_score(x)
+        c1_idx = np.where(mask_c1)[0]
+        c2_idx = np.where(mask_c2)[0]
+        c1_contact = c1_idx[contact.any(axis=1)]
+        c2_contact = c2_idx[contact.any(axis=0)]
+        residues = np.concatenate([c1_contact, c2_contact])
 
-            mean_pTM = _sum / n_pairs
-            x = mean_pLDDT * mean_pTM
-            pDockQ2 = self.pDockQ2_score(x)
+        mean_pLDDT = self.pLDDT[residues].mean()
+        x = mean_pLDDT * np.log10(n_pairs)
+        pDockQ = self.pDockQ_score(x)
+
+        pae_sub = self.PAE[np.ix_(mask_c1, mask_c2)]
+        pae_contacts = pae_sub[contact]
+        pae_ptm = self.compute_pTM(pae_contacts, 10.)
+        mean_pTM = pae_ptm.mean()
+        x = mean_pLDDT * mean_pTM
+        pDockQ2 = self.pDockQ2_score(x)
 
         return pDockQ, pDockQ2
 
@@ -303,11 +299,10 @@ class ScoreCalculator:
 
         LIS = 0.
         if selected_pae.size:
-            valid_pae = selected_pae[selected_pae < 12]
+            valid_pae = selected_pae[selected_pae < self.PAE_cutoff]
             if valid_pae.size:
-                scores = (12 - valid_pae) / 12
-                avg_score = np.mean(scores)
-                LIS = avg_score
+                scores = (self.PAE_cutoff - valid_pae) / self.PAE_cutoff
+                LIS = np.mean(scores)
 
         return LIS
 
@@ -329,26 +324,32 @@ class ScoreCalculator:
             Tuple of (ipTM, ipSAE) scores.
         """
         pair_type = 'protein'
-        if 'nucleic' in [self.chain_pair_type[chain1], self.chain_pair_type[chain2]]:
-            pair_type = 'nucleic'
+        if 'nucleic_acid' in [self.chain_pair_type[chain1], self.chain_pair_type[chain2]]:
+            pair_type = 'nucleic_acid'
 
         L = np.sum(self.chains == chain1) + np.sum(self.chains == chain2)
         d0_chain = self.compute_d0(L, pair_type)
 
         pTM_matrix_chain = self.compute_pTM(self.PAE, d0_chain)
-        ipTM_byres = np.zeros((pTM_matrix_chain.shape[0]))
 
-        valid_pairs_ipTM = (self.chains == chain2)
+        mask_c1 = self.chains == chain1
+        mask_c2 = self.chains == chain2
+
         ipTM_byres = np.array([0.])
-        if valid_pairs_ipTM.any():
-            ipTM_byres = np.mean(pTM_matrix_chain[:, valid_pairs_ipTM], axis=0)
+        if mask_c2.any():
+            ipTM_byres = np.mean(pTM_matrix_chain[np.ix_(mask_c1, mask_c2)], axis=1)
 
-        valid_pairs_matrix = (self.chains == chain2) & (self.PAE < self.PAE_cutoff)
-        valid_pairs_ipSAE = valid_pairs_matrix
+        pae_sub = self.PAE[np.ix_(mask_c1, mask_c2)]
+        ptm_sub = pTM_matrix_chain[np.ix_(mask_c1, mask_c2)]
+        valid_mask = pae_sub < self.PAE_cutoff
 
         ipSAE_byres = np.array([0.])
-        if valid_pairs_ipSAE.any():
-            ipSAE_byres = np.mean(pTM_matrix_chain[valid_pairs_ipSAE], axis=0)
+        if valid_mask.any():
+            masked_ptm = np.where(valid_mask, ptm_sub, 0.)
+            n_valid_per_col = valid_mask.sum(axis=0)
+            cols_with_valid = n_valid_per_col > 0
+            if cols_with_valid.any():
+                ipSAE_byres = masked_ptm[:, cols_with_valid].sum(axis=0) / n_valid_per_col[cols_with_valid]
 
         ipTM = np.max(ipTM_byres)
         ipSAE = np.max(ipSAE_byres)
@@ -365,7 +366,8 @@ class ScoreCalculator:
         rows = []
         processed = set()
         for chain1, chain2 in self.permuted:
-            if not all([chain in processed for chain in (chain1, chain2)]):
+            pair_key = frozenset((chain1, chain2))
+            if pair_key not in processed:
                 filtered = self.df.filter(
                     ((pl.col('chain1') == chain1) & (pl.col('chain2') == chain2)) |
                     ((pl.col('chain1') == chain2) & (pl.col('chain2') == chain1))
@@ -373,9 +375,7 @@ class ScoreCalculator:
                 max_ipsae = filtered.select('ipSAE').max().item()
                 max_row = filtered.filter(pl.col('ipSAE') == max_ipsae)
                 rows.append(max_row)
-
-                processed.add(chain1)
-                processed.add(chain2)
+                processed.add(pair_key)
 
         self.scores = pl.concat(rows)
 
@@ -384,13 +384,7 @@ class ScoreCalculator:
 
         Creates all unique ordered pairs of chains, excluding self-pairs.
         """
-        permuted = set()
-        for c1, c2 in permutations(self.unique_chains, 2):
-            if c1 != c2:
-                permuted.add((c1, c2))
-                permuted.add((c2, c1))
-
-        self.permuted = list(permuted)
+        self.permuted = list(permutations(self.unique_chains, 2))
 
     @staticmethod
     def pDockQ_score(x: float) -> float:
@@ -426,18 +420,17 @@ class ScoreCalculator:
         return 1.31 / (1 + np.exp(-0.075 * (x - 84.733))) + 0.005
 
     @staticmethod
-    @vectorize
-    def compute_pTM(x: float, d0: float) -> float:
+    def compute_pTM(x: np.ndarray, d0: float) -> np.ndarray:
         """Compute pTM score.
 
         Formula: pTM = 1.0 / (1 + (x / d0)^2)
 
         Args:
-            x: pLDDT or PAE value.
+            x: PAE values (scalar or array).
             d0: Distance parameter from compute_d0.
 
         Returns:
-            pTM score.
+            pTM score(s).
         """
         return 1. / (1 + (x / d0) ** 2)
 
@@ -512,8 +505,10 @@ class ModelParser:
             line_parser = self.parse_cif_line
 
         field_num = 0
-        lines = open(self.structure).readlines()
         fields = dict()
+        with open(self.structure) as f:
+            lines = f.readlines()
+
         for line in lines:
             if line.startswith('_atom_site.'):
                 _, field_name = line.strip().split('.')
@@ -522,6 +517,8 @@ class ModelParser:
 
             if any([line.startswith(atom) for atom in ['ATOM', 'HETATM']]):
                 atom = line_parser(line, fields)
+                if atom is None:
+                    continue
 
                 name = atom['atom_name']
                 if name == 'CA':
@@ -546,10 +543,11 @@ class ModelParser:
         whether nucleic acid residues are detected.
         """
         self.residue_types = np.array([res['res'] for res in self.residues])
-        chains = np.unique(self.chains)
-        self.chain_types = {chain: 'protein' for chain in chains}
-        for chain in chains:
-            indices = np.where(chains == chain)[0]
+        unique_chains = np.unique(self.chains)
+        chains_array = np.array(self.chains)
+        self.chain_types = {chain: 'protein' for chain in unique_chains}
+        for chain in unique_chains:
+            indices = np.where(chains_array == chain)[0]
             chain_residues = self.residue_types[indices]
             if any([r in chain_residues for r in self.nucleic_acids]):
                 self.chain_types[chain] = 'nucleic_acid'
@@ -584,7 +582,7 @@ class ModelParser:
         z = line[46:54].strip()
 
         return ModelParser.package_line(
-            atom_num, atom_name, residue_name, 
+            atom_num, atom_name, residue_name,
             chain_id, residue_id, x, y, z
         )
 
@@ -614,7 +612,7 @@ class ModelParser:
             return None
 
         return ModelParser.package_line(
-            atom_num, atom_name, residue_name, 
+            atom_num, atom_name, residue_name,
             chain_id, residue_id, x, y, z
         )
 

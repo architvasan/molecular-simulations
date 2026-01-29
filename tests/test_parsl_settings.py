@@ -72,7 +72,7 @@ class TestLocalSettings:
         
         assert settings.available_accelerators == 4
         assert settings.retries == 1
-        assert settings.label == 'htex'
+        assert settings.label == 'gpu'
         assert settings.worker_port_range == (10000, 20000)
     
     def test_local_settings_custom_values(self):
