@@ -72,7 +72,6 @@ class ipSAE:
         self.parser.parse_structure_file()
         self.parser.classify_chains()
         self.coordinates = np.vstack([res['coor'] for res in self.parser.residues])
-        self.token_array = np.array(self.parser.token_mask, dtype=bool)
 
     def prepare_scorer(self) -> None:
         """Initialize the ScoreCalculator for computing scores.
@@ -82,12 +81,11 @@ class ipSAE:
         """
         chains = np.array(self.parser.chains)
         chain_types = self.parser.chain_types
-        residue_types = np.array([res['res'] for res in self.parser.residues])
 
         self.scorer = ScoreCalculator(
             chains=chains,
             chain_pair_type=chain_types,
-            n_residues=residue_types.shape[0]
+            n_residues=len(self.parser.residues)
         )
 
     def run(self) -> None:
@@ -118,8 +116,8 @@ class ipSAE:
         Returns:
             pLDDT array scaled to 0-100 range.
         """
-        data = np.load(str(self.plddt_file))
-        pLDDT_arr = np.array(data['plddt'] * 100.)
+        data = np.load(self.plddt_file)
+        pLDDT_arr = data['plddt'] * 100.
         return pLDDT_arr
 
     def load_PAE_file(self) -> np.ndarray:
@@ -128,7 +126,7 @@ class ipSAE:
         Returns:
             PAE array from the 'pae' key in the npz file.
         """
-        data = np.load(str(self.pae_file))['pae']
+        data = np.load(self.pae_file)['pae']
         return data
 
 class ScoreCalculator:
@@ -153,7 +151,6 @@ class ScoreCalculator:
         pdockq_cutoff: Distance cutoff for pDockQ in Angstroms.
             Defaults to 8.0.
         pae_cutoff: PAE cutoff for ipSAE in Angstroms. Defaults to 12.0.
-        dist_cutoff: General distance cutoff in Angstroms. Defaults to 10.0.
 
     Example:
         >>> calc = ScoreCalculator(chains, chain_types, n_residues)
@@ -167,8 +164,7 @@ class ScoreCalculator:
         chain_pair_type: dict[str, str],
         n_residues: int,
         pdockq_cutoff: float = 8.,
-        pae_cutoff: float = 12.,
-        dist_cutoff: float = 10.
+        pae_cutoff: float = 12.
     ):
         """Initialize the ScoreCalculator.
 
@@ -178,7 +174,6 @@ class ScoreCalculator:
             n_residues: Residue type array.
             pdockq_cutoff: pDockQ distance cutoff.
             pae_cutoff: PAE cutoff.
-            dist_cutoff: General distance cutoff.
         """
         self.chains = chains
         self.unique_chains = np.unique(chains)
@@ -186,7 +181,6 @@ class ScoreCalculator:
         self.n_res = n_residues
         self.pDockQ_cutoff = pdockq_cutoff
         self.PAE_cutoff = pae_cutoff
-        self.dist_cutoff = dist_cutoff
 
         self.permute_chains()
 
@@ -324,7 +318,7 @@ class ScoreCalculator:
             Tuple of (ipTM, ipSAE) scores.
         """
         pair_type = 'protein'
-        if 'nucleic_acid' in [self.chain_pair_type[chain1], self.chain_pair_type[chain2]]:
+        if self.chain_pair_type[chain1] == 'nucleic_acid' or self.chain_pair_type[chain2] == 'nucleic_acid':
             pair_type = 'nucleic_acid'
 
         L = np.sum(self.chains == chain1) + np.sum(self.chains == chain2)
@@ -363,21 +357,18 @@ class ScoreCalculator:
         takes the maximum score for either direction as the undirected
         score.
         """
-        rows = []
-        processed = set()
-        for chain1, chain2 in self.permuted:
-            pair_key = frozenset((chain1, chain2))
-            if pair_key not in processed:
-                filtered = self.df.filter(
-                    ((pl.col('chain1') == chain1) & (pl.col('chain2') == chain2)) |
-                    ((pl.col('chain1') == chain2) & (pl.col('chain2') == chain1))
-                )
-                max_ipsae = filtered.select('ipSAE').max().item()
-                max_row = filtered.filter(pl.col('ipSAE') == max_ipsae)
-                rows.append(max_row)
-                processed.add(pair_key)
-
-        self.scores = pl.concat(rows)
+        self.scores = (
+            self.df
+            .with_columns(
+                pl.when(pl.col('chain1') < pl.col('chain2'))
+                .then(pl.concat_str(['chain1', 'chain2'], separator='_'))
+                .otherwise(pl.concat_str(['chain2', 'chain1'], separator='_'))
+                .alias('pair_key')
+            )
+            .sort('ipSAE', descending=True)
+            .unique(subset=['pair_key'], keep='first')
+            .drop('pair_key')
+        )
 
     def permute_chains(self) -> None:
         """Generate all permutations of chain pairs.
@@ -466,7 +457,6 @@ class ModelParser:
         structure: Path to the structure file.
         token_mask: List of token indicators for each residue.
         residues: List of dictionaries containing residue information.
-        cb_residues: List of C-beta residue dictionaries.
         chains: List of chain IDs for each residue.
         chain_types: Dictionary mapping chain ID to type after
             classify_chains().
@@ -490,7 +480,6 @@ class ModelParser:
 
         self.token_mask = []
         self.residues = []
-        self.cb_residues = []
         self.chains = []
 
     def parse_structure_file(self) -> None:
@@ -505,7 +494,7 @@ class ModelParser:
             line_parser = self.parse_cif_line
 
         field_num = 0
-        fields = dict()
+        fields = {}
         with open(self.structure) as f:
             lines = f.readlines()
 
@@ -515,26 +504,16 @@ class ModelParser:
                 fields[field_name] = field_num
                 field_num += 1
 
-            if any([line.startswith(atom) for atom in ['ATOM', 'HETATM']]):
+            if line.startswith(('ATOM', 'HETATM')):
                 atom = line_parser(line, fields)
                 if atom is None:
                     continue
 
                 name = atom['atom_name']
-                if name == 'CA':
+                if name == 'CA' or 'C1' in name:
                     self.token_mask.append(1)
                     self.residues.append(atom)
                     self.chains.append(atom['chain_id'])
-                    if atom['res'] == 'GLY':
-                        self.cb_residues.append(atom)
-
-                elif 'C1' in name:
-                    self.token_mask.append(1)
-                    self.residues.append(atom)
-                    self.chains.append(atom['chain_id'])
-
-                elif name == 'CB' or 'C3' in name:
-                    self.cb_residues.append(atom)
 
     def classify_chains(self) -> None:
         """Classify chains as protein or nucleic acid.
@@ -549,17 +528,10 @@ class ModelParser:
         for chain in unique_chains:
             indices = np.where(chains_array == chain)[0]
             chain_residues = self.residue_types[indices]
-            if any([r in chain_residues for r in self.nucleic_acids]):
+            if set(chain_residues) & self.NUCLEIC_ACIDS:
                 self.chain_types[chain] = 'nucleic_acid'
 
-    @property
-    def nucleic_acids(self) -> list[str]:
-        """Get canonical nucleic acid residue names.
-
-        Returns:
-            List of RNA and DNA residue names.
-        """
-        return ['DA', 'DC', 'DT', 'DG', 'A', 'C', 'U', 'G']
+    NUCLEIC_ACIDS = frozenset(['DA', 'DC', 'DT', 'DG', 'A', 'C', 'U', 'G'])
 
     @staticmethod
     def parse_pdb_line(line: str, *args) -> dict[str, Any]:
@@ -645,7 +617,7 @@ class ModelParser:
         return {
             'atom_num': int(atom_num),
             'atom_name': atom_name,
-            'coor': np.array([float(i) for i in [x, y, z]]),
+            'coor': np.array([x, y, z], dtype=float),
             'res': residue_name,
             'chain_id': chain_id,
             'resid': int(residue_id),

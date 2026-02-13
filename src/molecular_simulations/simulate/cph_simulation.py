@@ -157,15 +157,17 @@ class ConstantPHEnsemble:
         """
         self.paths = paths
         self.ref_energies = reference_energies
-        
+
         self.parsl_config = parsl_config
         self.dfk = None
 
         self.log_dir = log_dir
         self.pHs = pHs
         self.variant_sel = variant_sel
-        
+
         self.temperature = temperature
+        self.platform = platform
+        self.properties = properties
 
         self.run_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -319,6 +321,8 @@ class ConstantPHEnsemble:
             'nonbonded_cutoff': 0.9,
             'hmr': 1.5,
             'implicit_cutoff': 2.0,
+            'platform_name': self.platform,
+            'properties': self.properties,
         }
 
         return params
