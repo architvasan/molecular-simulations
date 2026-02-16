@@ -5,17 +5,18 @@ trajectory data using KMeans++ with dimensionality reduction.
 """
 
 import json
-import numpy as np
 from pathlib import Path
+from typing import Any, TypeVar, Union
+
+import numpy as np
 import polars as pl
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from tqdm import tqdm
-from typing import Any, Type, TypeVar, Union
 
 PathLike = Union[Path, str]
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 class GenericDataloader:
@@ -33,7 +34,7 @@ class GenericDataloader:
         data_files: List of paths to input data files (.npy format).
 
     Example:
-        >>> loader = GenericDataloader(['data1.npy', 'data2.npy'])
+        >>> loader = GenericDataloader(["data1.npy", "data2.npy"])
         >>> print(loader.data.shape)
     """
 
@@ -58,7 +59,7 @@ class GenericDataloader:
             temp = np.load(str(f))
             self.shapes.append(temp.shape)
             self.data_array.append(temp)
-        
+
         self.data_array = np.vstack(self.data_array)
         if len(self.data_array) > 2:
             x, *y = self.data_array.shape
@@ -88,7 +89,7 @@ class GenericDataloader:
         """
         if len(set(self.shapes)) == 1:
             return self.shapes[0]
-        
+
         return self.shapes
 
 
@@ -104,7 +105,7 @@ class PeriodicDataloader(GenericDataloader):
             periodic data (e.g., dihedral angles).
 
     Example:
-        >>> loader = PeriodicDataloader(['dihedrals.npy'])
+        >>> loader = PeriodicDataloader(["dihedrals.npy"])
         >>> # Original 10 features become 20 features
     """
 
@@ -115,7 +116,7 @@ class PeriodicDataloader(GenericDataloader):
             data_files: List of paths to input data files.
         """
         super().__init__(data_files)
-        
+
     def load_data(self) -> None:
         """Load periodic data and remove periodicity.
 
@@ -126,7 +127,7 @@ class PeriodicDataloader(GenericDataloader):
         self.shapes = []
         for f in self.files:
             temp = self.remove_periodicity(np.load(str(f)))
-            
+
             self.shapes.append(temp.shape)
             self.data_array.append(temp)
 
@@ -149,10 +150,10 @@ class PeriodicDataloader(GenericDataloader):
         """
         n_features = arr.shape[1]
         return_arr = np.zeros((arr.shape[0], n_features * 2))
-        
+
         for i in range(n_features):
-            return_arr[:, 2*i]   = np.cos(arr[:, i])
-            return_arr[:, 2*i+1] = np.sin(arr[:, i])
+            return_arr[:, 2 * i] = np.cos(arr[:, i])
+            return_arr[:, 2 * i + 1] = np.sin(arr[:, i])
 
         return return_arr
 
@@ -188,7 +189,7 @@ class AutoKMeans:
             Defaults to {'n_components': 2}.
 
     Example:
-        >>> clusterer = AutoKMeans('data/', max_clusters=15)
+        >>> clusterer = AutoKMeans("data/", max_clusters=15)
         >>> clusterer.run()
         >>> print(clusterer.cluster_centers)
     """
@@ -196,12 +197,12 @@ class AutoKMeans:
     def __init__(
         self,
         data_directory: PathLike,
-        pattern: str = '',
-        dataloader: Type[_T] = GenericDataloader,
+        pattern: str = "",
+        dataloader: type[_T] = GenericDataloader,
         max_clusters: int = 10,
         stride: int = 1,
-        reduction_algorithm: str = 'PCA',
-        reduction_kws: dict[str, Any] = {'n_components': 2}
+        reduction_algorithm: str = "PCA",
+        reduction_kws: dict[str, Any] = {"n_components": 2},
     ):
         """Initialize the automatic clustering workflow.
 
@@ -214,16 +215,16 @@ class AutoKMeans:
             reduction_algorithm: Dimensionality reduction method.
             reduction_kws: Arguments for the reduction algorithm.
         """
-        self.data_dir = Path(data_directory) 
-        self.dataloader = dataloader(list(self.data_dir.glob(f'{pattern}*.npy')))
+        self.data_dir = Path(data_directory)
+        self.dataloader = dataloader(list(self.data_dir.glob(f"{pattern}*.npy")))
         self.data = self.dataloader.data
         self.shape = self.dataloader.shape
-        
+
         self.n_clusters = max_clusters
         self.stride = stride
 
         self.decomposition = Decomposition(reduction_algorithm, **reduction_kws)
-    
+
     def run(self) -> None:
         """Run the complete automated clustering workflow.
 
@@ -256,9 +257,14 @@ class AutoKMeans:
         """
         best_centers = None
         best_labels = None
-        best_score = 0.
-        for n in tqdm(n_clusters, total=len(n_clusters), position=0, 
-                      leave=False, desc='Sweeping `n_clusters`'):
+        best_score = 0.0
+        for n in tqdm(
+            n_clusters,
+            total=len(n_clusters),
+            position=0,
+            leave=False,
+            desc="Sweeping `n_clusters`",
+        ):
             clusterer = KMeans(n_clusters=n)
             labels = clusterer.fit_predict(self.reduced)
             average_score = silhouette_score(self.reduced, labels)
@@ -279,7 +285,7 @@ class AutoKMeans:
         """
         cluster_centers = {i: None for i in range(len(self.centers))}
         for i, center in enumerate(self.centers):
-            closest = 100.
+            closest = 100.0
             for p, point in enumerate(self.reduced):
                 if (dist := np.linalg.norm(point - center)) < closest:
                     rep = p // self.shape[0]
@@ -295,7 +301,7 @@ class AutoKMeans:
         Writes the cluster_centers dictionary to 'cluster_centers.json'
         in the data directory.
         """
-        with open(str(self.data_dir / 'cluster_centers.json'), 'w') as fout:
+        with open(str(self.data_dir / "cluster_centers.json"), "w") as fout:
             json.dump(self.cluster_centers, fout, indent=4)
 
     def save_labels(self) -> None:
@@ -309,15 +315,17 @@ class AutoKMeans:
             shapes = [self.dataloader.shape[0]] * len(files)
         else:
             shapes = [shape[0] for shape in self.dataloader.shape]
-        
+
         df = pl.DataFrame()
         for file, shape in zip(files, shapes):
-            temp = pl.DataFrame({'system': [file.name] * shape, 'frame': np.arange(shape)})
-            df = pl.concat([df, temp], how='vertical')
+            temp = pl.DataFrame(
+                {"system": [file.name] * shape, "frame": np.arange(shape)}
+            )
+            df = pl.concat([df, temp], how="vertical")
 
-        df = df.with_columns(pl.Series(self.labels).alias('cluster'))
+        df = df.with_columns(pl.Series(self.labels).alias("cluster"))
 
-        df.write_parquet(str(self.data_dir / 'cluster_assignments.parquet'))
+        df.write_parquet(str(self.data_dir / "cluster_assignments.parquet"))
 
 
 class Decomposition:
@@ -336,7 +344,7 @@ class Decomposition:
             decomposer constructor.
 
     Example:
-        >>> decomp = Decomposition('PCA', n_components=3)
+        >>> decomp = Decomposition("PCA", n_components=3)
         >>> reduced_data = decomp.fit_transform(data)
     """
 
@@ -350,14 +358,10 @@ class Decomposition:
         Raises:
             KeyError: If an unsupported algorithm is specified.
         """
-        algorithms = {
-            'PCA': PCA,
-            'TICA': None,
-            'UMAP': None
-        }
+        algorithms = {"PCA": PCA, "TICA": None, "UMAP": None}
 
         self.decomposer = algorithms[algorithm](**kwargs)
-    
+
     def fit(self, X: np.ndarray) -> None:
         """Fit the decomposer with data.
 

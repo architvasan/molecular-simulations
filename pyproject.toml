@@ -54,7 +54,9 @@ docutils = [
 dev = [
     'pytest>=7.0',
     'pytest-cov>=4.0',
-    'numpy>=1.22'
+    'numpy>=1.22',
+    'ruff>=0.11',
+    'ty>=0.0.1a7',
 ]
 
 [tool.hatch.metadata]
@@ -77,3 +79,42 @@ markers = [
     'integration: end-to-end integration test',
     'unit: isolated unit test',
 ]
+
+[tool.ruff]
+target-version = 'py310'
+line-length = 88
+src = ['src', 'tests']
+
+[tool.ruff.lint]
+select = [
+    'E',      # pycodestyle errors
+    'W',      # pycodestyle warnings
+    'F',      # pyflakes
+    'I',      # isort
+    'N',      # pep8-naming
+    'UP',     # pyupgrade
+    'B',      # flake8-bugbear
+    'SIM',    # flake8-simplify
+    'TCH',    # flake8-type-checking
+    'RUF',    # ruff-specific rules
+]
+ignore = [
+    'E501',   # line too long (formatter handles this)
+    'N802',   # lowercase function name (compute_at_pH, load_pLDDT, etc.)
+    'N803',   # lowercase argument name (X for data matrices, etc.)
+    'N806',   # lowercase variable in function (pH, X, etc.)
+    'N813',   # ignore import alias case (MDAnalysis -> mda)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports in __init__ are intentional
+
+[tool.ruff.lint.isort]
+known-first-party = ['molecular_simulations']
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.ty]
+python-version = '3.10'
+src = ['src']

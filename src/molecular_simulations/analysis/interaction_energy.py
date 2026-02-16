@@ -6,21 +6,23 @@ Supports both static models and dynamic trajectory analysis.
 """
 
 from abc import ABC, abstractmethod
-from copy import deepcopy
-from openmm import (Context, Platform, System, VerletIntegrator)
-from openmm.app import (AmberPrmtopFile, CutoffNonPeriodic, ForceField, HBonds, PDBFile, Topology)
-from openmm.unit import (kilocalories_per_mole, nanometers, picosecond)
-import MDAnalysis as mda
-from MDAnalysis.analysis.distances import contact_matrix
+from pathlib import Path
+from typing import Union
+
 import mdtraj as md
 import numpy as np
-import parmed as pmd
-from pathlib import Path
+from openmm import Context, Platform, System, VerletIntegrator
+from openmm.app import (
+    AmberPrmtopFile,
+    CutoffNonPeriodic,
+    ForceField,
+    HBonds,
+    PDBFile,
+    Topology,
+)
+from openmm.unit import kilocalories_per_mole, nanometers, picosecond
 from pdbfixer import PDBFixer
-import pickle
-import gc
 from tqdm import tqdm
-from typing import Dict, List, Tuple, Union
 
 PathLike = Union[Path, str]
 
@@ -88,18 +90,18 @@ class StaticInteractionEnergy(InteractionEnergy):
             at this resid. Defaults to None.
 
     Example:
-        >>> ie = StaticInteractionEnergy('complex.pdb', chain='B')
+        >>> ie = StaticInteractionEnergy("complex.pdb", chain="B")
         >>> ie.compute()
         >>> print(f"LJ: {ie.lj}, Coulomb: {ie.coulomb}")
     """
 
     def __init__(
-        self, 
-        pdb: str, 
-        chain: str = 'A', 
-        platform: str = 'CUDA',
-        first_residue: Union[int, None] = None, 
-        last_residue: Union[int, None] = None
+        self,
+        pdb: str,
+        chain: str = "A",
+        platform: str = "CUDA",
+        first_residue: int | None = None,
+        last_residue: int | None = None,
     ):
         """Initialize the StaticInteractionEnergy calculator.
 
@@ -115,7 +117,7 @@ class StaticInteractionEnergy(InteractionEnergy):
         self.platform = Platform.getPlatformByName(platform)
         self.first = first_residue
         self.last = last_residue
-        
+
     def get_system(self) -> System:
         """Build an implicit solvent OpenMM system.
 
@@ -127,19 +129,15 @@ class StaticInteractionEnergy(InteractionEnergy):
         """
         pdb = PDBFile(self.pdb)
         positions, topology = pdb.positions, pdb.topology
-        forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
+        forcefield = ForceField("amber14-all.xml", "implicit/gbn2.xml")
         try:
             system = forcefield.createSystem(
-                topology,
-                soluteDielectric=1.,
-                solventDielectric=80.
+                topology, soluteDielectric=1.0, solventDielectric=80.0
             )
         except ValueError:
             positions, topology = self.fix_pdb()
             system = forcefield.createSystem(
-                topology,
-                soluteDielectric=1.,
-                solventDielectric=80.
+                topology, soluteDielectric=1.0, solventDielectric=80.0
             )
 
         self.positions = positions
@@ -147,7 +145,7 @@ class StaticInteractionEnergy(InteractionEnergy):
 
         return system
 
-    def compute(self, positions: Union[np.ndarray, None] = None) -> None:
+    def compute(self, positions: np.ndarray | None = None) -> None:
         """Compute interaction energy of the system.
 
         Computes both Lennard-Jones and Coulombic interaction energies
@@ -163,7 +161,7 @@ class StaticInteractionEnergy(InteractionEnergy):
         system = self.get_system()
         if positions is None:
             positions = self.positions
-            
+
         for force in system.getForces():
             if isinstance(force, NonbondedForce):
                 force.setForceGroup(0)
@@ -196,24 +194,24 @@ class StaticInteractionEnergy(InteractionEnergy):
 
             else:
                 force.setForceGroup(2)
-        
+
         integrator = VerletIntegrator(0.001 * picosecond)
         context = Context(system, integrator, self.platform)
         context.setPositions(positions)
-        
+
         total_coulomb = self.energy(context, 1, 0, 1, 0)
         solute_coulomb = self.energy(context, 1, 0, 0, 0)
         solvent_coulomb = self.energy(context, 0, 0, 1, 0)
         total_lj = self.energy(context, 0, 1, 0, 1)
         solute_lj = self.energy(context, 0, 1, 0, 0)
         solvent_lj = self.energy(context, 0, 0, 0, 1)
-        
+
         coul_final = total_coulomb - solute_coulomb - solvent_coulomb
         lj_final = total_lj - solute_lj - solvent_lj
 
         self.coulomb = coul_final.value_in_unit(kilocalories_per_mole)
         self.lj = lj_final.value_in_unit(kilocalories_per_mole)
-    
+
     def get_selection(self, topology: Topology) -> None:
         """Get indices of atoms for pairwise interaction calculation.
 
@@ -225,29 +223,27 @@ class StaticInteractionEnergy(InteractionEnergy):
         """
         if self.first is None and self.last is None:
             selection = [
-                a.index 
-                for a in topology.atoms() 
-                if a.residue.chain.id == self.chain
+                a.index for a in topology.atoms() if a.residue.chain.id == self.chain
             ]
         elif self.first is not None and self.last is None:
             selection = [
                 a.index
                 for a in topology.atoms()
-                if a.residue.chain.id == self.chain 
+                if a.residue.chain.id == self.chain
                 and int(self.first) <= int(a.residue.id)
             ]
         elif self.first is None:
             selection = [
                 a.index
                 for a in topology.atoms()
-                if a.residue.chain.id == self.chain 
+                if a.residue.chain.id == self.chain
                 and int(self.last) >= int(a.residue.id)
             ]
         else:
             selection = [
                 a.index
                 for a in topology.atoms()
-                if a.residue.chain.id == self.chain 
+                if a.residue.chain.id == self.chain
                 and int(self.first) <= int(a.residue.id) <= int(self.last)
             ]
 
@@ -269,7 +265,7 @@ class StaticInteractionEnergy(InteractionEnergy):
         fixer.addMissingHydrogens(7.0)
 
         return fixer.positions, fixer.topology
-    
+
     @property
     def interactions(self) -> np.ndarray:
         """Get LJ and Coulombic energies as an array.
@@ -281,11 +277,11 @@ class StaticInteractionEnergy(InteractionEnergy):
 
     @staticmethod
     def energy(
-        context: Context, 
-        solute_coulomb_scale: int = 0, 
-        solute_lj_scale: int = 0, 
-        solvent_coulomb_scale: int = 0, 
-        solvent_lj_scale: int = 0
+        context: Context,
+        solute_coulomb_scale: int = 0,
+        solute_lj_scale: int = 0,
+        solvent_coulomb_scale: int = 0,
+        solvent_lj_scale: int = 0,
     ) -> float:
         """Compute potential energy for the given context.
 
@@ -323,18 +319,18 @@ class InteractionEnergyFrame(StaticInteractionEnergy):
 
     Example:
         >>> system = build_system(topology)
-        >>> ie = InteractionEnergyFrame(system, topology, chain='A')
+        >>> ie = InteractionEnergyFrame(system, topology, chain="A")
         >>> ie.compute(positions)
     """
 
     def __init__(
-        self, 
-        system: System, 
-        top: Topology, 
-        chain: str = 'A', 
-        platform: str = 'CUDA',
-        first_residue: Union[int, None] = None, 
-        last_residue: Union[int, None] = None
+        self,
+        system: System,
+        top: Topology,
+        chain: str = "A",
+        platform: str = "CUDA",
+        first_residue: int | None = None,
+        last_residue: int | None = None,
     ):
         """Initialize the InteractionEnergyFrame calculator.
 
@@ -346,7 +342,7 @@ class InteractionEnergyFrame(StaticInteractionEnergy):
             first_residue: Starting residue for calculation.
             last_residue: Ending residue for calculation.
         """
-        super().__init__('', chain, platform, first_residue, last_residue)
+        super().__init__("", chain, platform, first_residue, last_residue)
         self.system = system
         self.top = top
 
@@ -388,21 +384,21 @@ class DynamicInteractionEnergy:
             Defaults to False.
 
     Example:
-        >>> die = DynamicInteractionEnergy('system.prmtop', 'traj.dcd')
+        >>> die = DynamicInteractionEnergy("system.prmtop", "traj.dcd")
         >>> die.compute_energies()
         >>> print(die.energies.shape)  # (n_frames, 2)
     """
 
     def __init__(
-        self, 
-        top: PathLike, 
-        traj: PathLike, 
-        stride: int = 1, 
-        chain: str = 'A', 
-        platform: str = 'CUDA',
-        first_residue: Union[int, None] = None,
-        last_residue: Union[int, None] = None,
-        progress_bar: bool = False
+        self,
+        top: PathLike,
+        traj: PathLike,
+        stride: int = 1,
+        chain: str = "A",
+        platform: str = "CUDA",
+        first_residue: int | None = None,
+        last_residue: int | None = None,
+        progress_bar: bool = False,
     ):
         """Initialize the DynamicInteractionEnergy calculator.
 
@@ -424,8 +420,7 @@ class DynamicInteractionEnergy:
         self.progress = progress_bar
 
         self.IE = InteractionEnergyFrame(
-            self.system, self.top, chain, 
-            platform, first_residue, last_residue
+            self.system, self.top, chain, platform, first_residue, last_residue
         )
 
     def compute_energies(self) -> None:
@@ -436,7 +431,7 @@ class DynamicInteractionEnergy:
         """
         n_frames = self.coordinates.shape[0] // self.stride
         self.energies = np.zeros((n_frames, 2))
-        
+
         if self.progress:
             pbar = tqdm(total=n_frames, position=0, leave=False)
 
@@ -451,7 +446,7 @@ class DynamicInteractionEnergy:
 
         if self.progress:
             pbar.close()
-    
+
     def build_system(self, top: PathLike) -> System:
         """Build an OpenMM system from the topology file.
 
@@ -466,27 +461,23 @@ class DynamicInteractionEnergy:
         Raises:
             NotImplementedError: If topology file type is not supported.
         """
-        if top.suffix == '.pdb':
+        if top.suffix == ".pdb":
             top = PDBFile(str(top)).topology
             self.top = top
-            forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
+            forcefield = ForceField("amber14-all.xml", "implicit/gbn2.xml")
             return forcefield.createSystem(
-                top, 
-                soluteDielectric=1., 
-                solventDielectric=78.5
+                top, soluteDielectric=1.0, solventDielectric=78.5
             )
-        elif top.suffix == '.prmtop':
+        elif top.suffix == ".prmtop":
             top = AmberPrmtopFile(str(top))
             self.top = top
             return top.createSystem(
                 nonbondedMethod=CutoffNonPeriodic,
-                nonbondedCutoff=2. * nanometers,
-                constraints=HBonds
+                nonbondedCutoff=2.0 * nanometers,
+                constraints=HBonds,
             )
         else:
-            raise NotImplementedError(
-                f'Error! Topology type {top} not implemented!'
-            )
+            raise NotImplementedError(f"Error! Topology type {top} not implemented!")
 
     def load_traj(self, top: PathLike, traj: PathLike) -> np.ndarray:
         """Load trajectory into mdtraj and extract coordinates.

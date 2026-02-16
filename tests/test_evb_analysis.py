@@ -17,16 +17,16 @@ Testing strategy:
 - Test WHAM fallback when pymbar is unavailable
 - Verify statistical algorithms with known inputs/outputs
 """
-import numpy as np
-import polars as pl
-import pytest
+
 import sys
 import tempfile
 from dataclasses import fields
 from pathlib import Path
-from typing import Optional
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
+import numpy as np
+import polars as pl
+import pytest
 
 # Mark all tests as unit tests (no OpenMM/Parsl required)
 pytestmark = pytest.mark.unit
@@ -38,6 +38,7 @@ pytestmark = pytest.mark.unit
 
 # We need to mock heavy dependencies before importing free_energy module
 # The module imports openmm, parsl, MDAnalysis at module load time
+
 
 @pytest.fixture(autouse=True)
 def mock_free_energy_deps():
@@ -57,8 +58,8 @@ def mock_free_energy_deps():
     # Store original modules if they exist
     original_modules = {}
     modules_to_mock = [
-        'molecular_simulations.simulate.omm_simulator',
-        'molecular_simulations.simulate.reporters',
+        "molecular_simulations.simulate.omm_simulator",
+        "molecular_simulations.simulate.reporters",
     ]
 
     for mod in modules_to_mock:
@@ -66,14 +67,17 @@ def mock_free_energy_deps():
             original_modules[mod] = sys.modules[mod]
 
     # Clear cached import of free_energy if it exists (to force reimport)
-    if 'molecular_simulations.simulate.free_energy' in sys.modules:
-        del sys.modules['molecular_simulations.simulate.free_energy']
+    if "molecular_simulations.simulate.free_energy" in sys.modules:
+        del sys.modules["molecular_simulations.simulate.free_energy"]
 
     # Apply mocks
-    with patch.dict(sys.modules, {
-        'molecular_simulations.simulate.omm_simulator': mock_omm_simulator,
-        'molecular_simulations.simulate.reporters': mock_reporters,
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "molecular_simulations.simulate.omm_simulator": mock_omm_simulator,
+            "molecular_simulations.simulate.reporters": mock_reporters,
+        },
+    ):
         # Also need to mock the relative import paths
         mock_omm_simulator.Simulator = MagicMock()
         mock_reporters.RCReporter = MagicMock()
@@ -102,7 +106,7 @@ def generate_umbrella_sampling_data(
     temperature: float = 300.0,
     add_equilibration: bool = False,
     equilibration_frames: int = 100,
-    seed: Optional[int] = None
+    seed: int | None = None,
 ) -> tuple[list[np.ndarray], np.ndarray]:
     """Generate synthetic umbrella sampling RC data.
 
@@ -159,7 +163,7 @@ def generate_correlated_timeseries(
     correlation_time: int = 50,
     mean: float = 0.0,
     std: float = 0.01,
-    seed: Optional[int] = None
+    seed: int | None = None,
 ) -> np.ndarray:
     """Generate a correlated time series using AR(1) process.
 
@@ -185,7 +189,7 @@ def generate_correlated_timeseries(
     data[0] = np.random.normal(mean, std)
 
     for i in range(1, n_frames):
-        data[i] = mean + phi * (data[i-1] - mean) + np.random.normal(0, noise_std)
+        data[i] = mean + phi * (data[i - 1] - mean) + np.random.normal(0, noise_std)
 
     return data
 
@@ -199,14 +203,12 @@ def create_rc_log_file(path: Path, rc_data: np.ndarray) -> None:
         path: Path to write the log file.
         rc_data: Array of RC values.
     """
-    df = pl.DataFrame({'rc': rc_data})
+    df = pl.DataFrame({"rc": rc_data})
     df.write_csv(str(path))
 
 
 def create_rc_log_files(
-    log_path: Path,
-    log_prefix: str,
-    rc_data_list: list[np.ndarray]
+    log_path: Path, log_prefix: str, rc_data_list: list[np.ndarray]
 ) -> None:
     """Create multiple RC log files for a complete EVB run.
 
@@ -217,7 +219,7 @@ def create_rc_log_files(
     """
     log_path.mkdir(parents=True, exist_ok=True)
     for i, rc_data in enumerate(rc_data_list):
-        log_file = log_path / f'{log_prefix}_{i}.log'
+        log_file = log_path / f"{log_prefix}_{i}.log"
         create_rc_log_file(log_file, rc_data)
 
 
@@ -225,15 +227,12 @@ def create_rc_log_files(
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def synthetic_rc_data():
     """Generate synthetic RC data with known properties."""
     return generate_umbrella_sampling_data(
-        n_windows=5,
-        n_frames=500,
-        rc0_min=-0.1,
-        rc0_max=0.1,
-        seed=42
+        n_windows=5, n_frames=500, rc0_min=-0.1, rc0_max=0.1, seed=42
     )
 
 
@@ -247,7 +246,7 @@ def synthetic_rc_data_with_equilibration():
         rc0_max=0.1,
         add_equilibration=True,
         equilibration_frames=50,
-        seed=42
+        seed=42,
     )
 
 
@@ -255,8 +254,8 @@ def synthetic_rc_data_with_equilibration():
 def mock_evb_instance():
     """Create a mock EVB instance for testing from_evb_instance."""
     mock = MagicMock()
-    mock.log_path = Path('/mock/log/path')
-    mock.log_prefix = 'reactant'
+    mock.log_path = Path("/mock/log/path")
+    mock.log_prefix = "reactant"
     mock.k = 160000.0
     mock.reaction_coordinate = np.linspace(-0.2, 0.2, 10)
     return mock
@@ -265,6 +264,7 @@ def mock_evb_instance():
 # =============================================================================
 # Test Dataclasses
 # =============================================================================
+
 
 class TestPMFResult:
     """Tests for PMFResult dataclass."""
@@ -284,7 +284,7 @@ class TestPMFResult:
             pmf=pmf,
             pmf_uncertainty=pmf_uncertainty,
             free_energies=free_energies,
-            free_energy_uncertainty=free_energy_uncertainty
+            free_energy_uncertainty=free_energy_uncertainty,
         )
 
         assert isinstance(result.bin_centers, np.ndarray)
@@ -297,8 +297,13 @@ class TestPMFResult:
         from molecular_simulations.simulate.free_energy import PMFResult
 
         field_names = {f.name for f in fields(PMFResult)}
-        expected = {'bin_centers', 'pmf', 'pmf_uncertainty',
-                    'free_energies', 'free_energy_uncertainty'}
+        expected = {
+            "bin_centers",
+            "pmf",
+            "pmf_uncertainty",
+            "free_energies",
+            "free_energy_uncertainty",
+        }
         assert field_names == expected
 
 
@@ -315,7 +320,7 @@ class TestConvergenceResult:
             sem=0.001,
             n_blocks=10,
             block_means=np.random.random(10),
-            is_converged=True
+            is_converged=True,
         )
 
         assert result.window_idx == 5
@@ -328,15 +333,23 @@ class TestConvergenceResult:
 
         # Converged case
         converged = ConvergenceResult(
-            window_idx=0, mean_rc=0.0, sem=0.005,
-            n_blocks=5, block_means=np.zeros(5), is_converged=True
+            window_idx=0,
+            mean_rc=0.0,
+            sem=0.005,
+            n_blocks=5,
+            block_means=np.zeros(5),
+            is_converged=True,
         )
         assert converged.is_converged == True
 
         # Not converged case
         not_converged = ConvergenceResult(
-            window_idx=0, mean_rc=0.0, sem=0.05,
-            n_blocks=5, block_means=np.zeros(5), is_converged=False
+            window_idx=0,
+            mean_rc=0.0,
+            sem=0.05,
+            n_blocks=5,
+            block_means=np.zeros(5),
+            is_converged=False,
         )
         assert not_converged.is_converged == False
 
@@ -351,7 +364,7 @@ class TestOverlapResult:
         result = OverlapResult(
             overlap_matrix=np.array([0.5, 0.6, 0.4, 0.5]),
             min_overlap=0.4,
-            problem_pairs=[]
+            problem_pairs=[],
         )
 
         assert len(result.problem_pairs) == 0
@@ -364,7 +377,7 @@ class TestOverlapResult:
         result = OverlapResult(
             overlap_matrix=np.array([0.5, 0.01, 0.4]),
             min_overlap=0.01,
-            problem_pairs=[(1, 2)]
+            problem_pairs=[(1, 2)],
         )
 
         assert len(result.problem_pairs) == 1
@@ -379,11 +392,7 @@ class TestEquilibrationResult:
         from molecular_simulations.simulate.free_energy import EquilibrationResult
 
         result = EquilibrationResult(
-            window_idx=0,
-            t0=0,
-            g=1.5,
-            n_effective=666.7,
-            fraction_discarded=0.0
+            window_idx=0, t0=0, g=1.5, n_effective=666.7, fraction_discarded=0.0
         )
 
         assert result.t0 == 0
@@ -394,11 +403,7 @@ class TestEquilibrationResult:
         from molecular_simulations.simulate.free_energy import EquilibrationResult
 
         result = EquilibrationResult(
-            window_idx=3,
-            t0=500,
-            g=2.0,
-            n_effective=250.0,
-            fraction_discarded=0.5
+            window_idx=3, t0=500, g=2.0, n_effective=250.0, fraction_discarded=0.5
         )
 
         assert result.fraction_discarded == 0.5
@@ -411,8 +416,11 @@ class TestEVBAnalysisResult:
     def test_evb_analysis_result_instantiation(self):
         """Test EVBAnalysisResult with all sub-results."""
         from molecular_simulations.simulate.free_energy import (
-            PMFResult, ConvergenceResult, OverlapResult,
-            EquilibrationResult, EVBAnalysisResult
+            ConvergenceResult,
+            EquilibrationResult,
+            EVBAnalysisResult,
+            OverlapResult,
+            PMFResult,
         )
 
         pmf = PMFResult(
@@ -420,24 +428,20 @@ class TestEVBAnalysisResult:
             pmf=np.random.random(20),
             pmf_uncertainty=np.random.random(20) * 0.1,
             free_energies=np.random.random(5),
-            free_energy_uncertainty=np.random.random(5) * 0.1
+            free_energy_uncertainty=np.random.random(5) * 0.1,
         )
 
         convergence = [
-            ConvergenceResult(i, 0.0, 0.01, 5, np.zeros(5), True)
-            for i in range(5)
+            ConvergenceResult(i, 0.0, 0.01, 5, np.zeros(5), True) for i in range(5)
         ]
 
         overlap = OverlapResult(
             overlap_matrix=np.array([0.5, 0.5, 0.5, 0.5]),
             min_overlap=0.5,
-            problem_pairs=[]
+            problem_pairs=[],
         )
 
-        equilibration = [
-            EquilibrationResult(i, 0, 1.0, 100.0, 0.0)
-            for i in range(5)
-        ]
+        equilibration = [EquilibrationResult(i, 0, 1.0, 100.0, 0.0) for i in range(5)]
 
         rc_data = [np.random.random(100) for _ in range(5)]
 
@@ -448,7 +452,7 @@ class TestEVBAnalysisResult:
             equilibration=equilibration,
             rc_data=rc_data,
             temperature=300.0,
-            k_umbrella=160000.0
+            k_umbrella=160000.0,
         )
 
         assert result.temperature == 300.0
@@ -460,6 +464,7 @@ class TestEVBAnalysisResult:
 # =============================================================================
 # Test EVBAnalyzer Initialization
 # =============================================================================
+
 
 class TestEVBAnalyzerInit:
     """Tests for EVBAnalyzer initialization."""
@@ -474,13 +479,13 @@ class TestEVBAnalyzerInit:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             assert analyzer.log_path == log_path
-            assert analyzer.log_prefix == 'test'
+            assert analyzer.log_prefix == "test"
             assert analyzer.k == 160000.0
             np.testing.assert_array_equal(analyzer.reaction_coordinate, rc0_values)
             assert analyzer.output_path == log_path  # Default
@@ -490,16 +495,16 @@ class TestEVBAnalyzerInit:
         from molecular_simulations.simulate.free_energy import EVBAnalyzer
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / 'logs'
+            log_path = Path(tmpdir) / "logs"
             log_path.mkdir()
-            output_path = Path(tmpdir) / 'results'
+            output_path = Path(tmpdir) / "results"
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
                 rc0_values=np.linspace(-0.1, 0.1, 5),
-                output_path=output_path
+                output_path=output_path,
             )
 
             assert analyzer.output_path == output_path
@@ -510,10 +515,10 @@ class TestEVBAnalyzerInit:
 
         with pytest.raises(FileNotFoundError, match="Log path does not exist"):
             EVBAnalyzer(
-                log_path=Path('/nonexistent/path'),
-                log_prefix='test',
+                log_path=Path("/nonexistent/path"),
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.linspace(-0.1, 0.1, 5)
+                rc0_values=np.linspace(-0.1, 0.1, 5),
             )
 
     def test_init_converts_rc0_to_array(self):
@@ -526,9 +531,9 @@ class TestEVBAnalyzerInit:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_list
+                rc0_values=rc0_list,
             )
 
             assert isinstance(analyzer.reaction_coordinate, np.ndarray)
@@ -539,6 +544,7 @@ class TestEVBAnalyzerInit:
 # Test EVBAnalyzer Class Methods
 # =============================================================================
 
+
 class TestEVBAnalyzerFromMetadata:
     """Tests for EVBAnalyzer.from_metadata class method."""
 
@@ -547,7 +553,7 @@ class TestEVBAnalyzerFromMetadata:
         from molecular_simulations.simulate.free_energy import EVBAnalyzer
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / 'logs'
+            log_path = Path(tmpdir) / "logs"
             log_path.mkdir()
 
             metadata_content = f'''
@@ -557,13 +563,13 @@ log_prefix = "reactant"
 k_umbrella = 160000.0
 rc0_values = [-0.2, -0.1, 0.0, 0.1, 0.2]
 '''
-            metadata_path = Path(tmpdir) / 'metadata.toml'
+            metadata_path = Path(tmpdir) / "metadata.toml"
             metadata_path.write_text(metadata_content)
 
             analyzer = EVBAnalyzer.from_metadata(metadata_path)
 
             assert analyzer.log_path == log_path
-            assert analyzer.log_prefix == 'reactant'
+            assert analyzer.log_prefix == "reactant"
             assert analyzer.k == 160000.0
             assert len(analyzer.reaction_coordinate) == 5
 
@@ -572,7 +578,7 @@ rc0_values = [-0.2, -0.1, 0.0, 0.1, 0.2]
         from molecular_simulations.simulate.free_energy import EVBAnalyzer
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / 'logs'
+            log_path = Path(tmpdir) / "logs"
             log_path.mkdir()
 
             metadata_content = f'''
@@ -581,12 +587,12 @@ log_prefix = "product"
 k_umbrella = 200000.0
 rc0_values = [-0.1, 0.0, 0.1]
 '''
-            metadata_path = Path(tmpdir) / 'metadata.toml'
+            metadata_path = Path(tmpdir) / "metadata.toml"
             metadata_path.write_text(metadata_content)
 
             analyzer = EVBAnalyzer.from_metadata(metadata_path)
 
-            assert analyzer.log_prefix == 'product'
+            assert analyzer.log_prefix == "product"
             assert analyzer.k == 200000.0
 
     def test_from_metadata_with_output_path(self):
@@ -594,9 +600,9 @@ rc0_values = [-0.1, 0.0, 0.1]
         from molecular_simulations.simulate.free_energy import EVBAnalyzer
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / 'logs'
+            log_path = Path(tmpdir) / "logs"
             log_path.mkdir()
-            output_path = Path(tmpdir) / 'results'
+            output_path = Path(tmpdir) / "results"
 
             metadata_content = f'''
 [evb]
@@ -606,7 +612,7 @@ k_umbrella = 160000.0
 rc0_values = [-0.1, 0.1]
 output_path = "{output_path}"
 '''
-            metadata_path = Path(tmpdir) / 'metadata.toml'
+            metadata_path = Path(tmpdir) / "metadata.toml"
             metadata_path.write_text(metadata_content)
 
             analyzer = EVBAnalyzer.from_metadata(metadata_path)
@@ -631,8 +637,7 @@ class TestEVBAnalyzerFromEVBInstance:
             assert analyzer.log_prefix == mock_evb_instance.log_prefix
             assert analyzer.k == mock_evb_instance.k
             np.testing.assert_array_equal(
-                analyzer.reaction_coordinate,
-                mock_evb_instance.reaction_coordinate
+                analyzer.reaction_coordinate, mock_evb_instance.reaction_coordinate
             )
 
 
@@ -647,21 +652,21 @@ class TestEVBAnalyzerSaveMetadata:
             log_path = Path(tmpdir)
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([-0.1, 0.0, 0.1])
+                rc0_values=np.array([-0.1, 0.0, 0.1]),
             )
 
             saved_path = analyzer.save_metadata()
 
-            assert saved_path == log_path / 'evb_metadata.toml'
+            assert saved_path == log_path / "evb_metadata.toml"
             assert saved_path.exists()
 
             # Verify content
             content = saved_path.read_text()
-            assert '[evb]' in content
+            assert "[evb]" in content
             assert 'log_prefix = "test"' in content
-            assert 'k_umbrella = 160000.0' in content
+            assert "k_umbrella = 160000.0" in content
 
     def test_save_metadata_custom_path(self):
         """Test save_metadata with custom output path."""
@@ -670,15 +675,15 @@ class TestEVBAnalyzerSaveMetadata:
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
             # Create parent directory for custom path (save_metadata doesn't create it)
-            custom_dir = Path(tmpdir) / 'custom'
+            custom_dir = Path(tmpdir) / "custom"
             custom_dir.mkdir()
-            custom_path = custom_dir / 'metadata.toml'
+            custom_path = custom_dir / "metadata.toml"
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='custom',
+                log_prefix="custom",
                 k_umbrella=200000.0,
-                rc0_values=np.array([-0.2, 0.2])
+                rc0_values=np.array([-0.2, 0.2]),
             )
 
             saved_path = analyzer.save_metadata(output_path=custom_path)
@@ -696,9 +701,9 @@ class TestEVBAnalyzerSaveMetadata:
 
             original = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='roundtrip',
+                log_prefix="roundtrip",
                 k_umbrella=180000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             saved_path = original.save_metadata()
@@ -707,14 +712,14 @@ class TestEVBAnalyzerSaveMetadata:
             assert loaded.log_prefix == original.log_prefix
             assert loaded.k == original.k
             np.testing.assert_array_almost_equal(
-                loaded.reaction_coordinate,
-                original.reaction_coordinate
+                loaded.reaction_coordinate, original.reaction_coordinate
             )
 
 
 # =============================================================================
 # Test EVBAnalyzer Data Loading
 # =============================================================================
+
 
 class TestEVBAnalyzerLoadRCData:
     """Tests for EVBAnalyzer.load_rc_data method."""
@@ -727,13 +732,13 @@ class TestEVBAnalyzerLoadRCData:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             loaded_data = analyzer.load_rc_data()
@@ -751,14 +756,14 @@ class TestEVBAnalyzerLoadRCData:
 
             # Create only 2 of 5 expected files
             for i in [0, 2]:
-                log_file = log_path / f'test_{i}.log'
+                log_file = log_path / f"test_{i}.log"
                 create_rc_log_file(log_file, np.random.random(100))
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.linspace(-0.1, 0.1, 5)
+                rc0_values=np.linspace(-0.1, 0.1, 5),
             )
 
             with pytest.raises(FileNotFoundError, match="RC log file not found"):
@@ -776,13 +781,13 @@ class TestEVBAnalyzerGetAvailableWindows:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             available = analyzer.get_available_windows()
@@ -798,14 +803,14 @@ class TestEVBAnalyzerGetAvailableWindows:
 
             # Create only windows 0, 2, 4
             for i in [0, 2, 4]:
-                log_file = log_path / f'test_{i}.log'
+                log_file = log_path / f"test_{i}.log"
                 create_rc_log_file(log_file, np.random.random(100))
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.linspace(-0.1, 0.1, 5)
+                rc0_values=np.linspace(-0.1, 0.1, 5),
             )
 
             available = analyzer.get_available_windows()
@@ -821,9 +826,9 @@ class TestEVBAnalyzerGetAvailableWindows:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.linspace(-0.1, 0.1, 5)
+                rc0_values=np.linspace(-0.1, 0.1, 5),
             )
 
             available = analyzer.get_available_windows()
@@ -842,22 +847,22 @@ class TestEVBAnalyzerCheckRunStatus:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             status = analyzer.check_run_status()
 
-            assert status['n_expected'] == len(rc_data)
-            assert status['n_complete'] == len(rc_data)
-            assert status['complete_fraction'] == 1.0
-            assert status['missing_windows'] == []
-            assert len(status['frames_per_window']) == len(rc_data)
+            assert status["n_expected"] == len(rc_data)
+            assert status["n_complete"] == len(rc_data)
+            assert status["complete_fraction"] == 1.0
+            assert status["missing_windows"] == []
+            assert len(status["frames_per_window"]) == len(rc_data)
 
     def test_check_run_status_partial(self):
         """Test check_run_status for partial run."""
@@ -868,27 +873,28 @@ class TestEVBAnalyzerCheckRunStatus:
 
             # Create only windows 0, 1, 2 of 5
             for i in range(3):
-                log_file = log_path / f'test_{i}.log'
+                log_file = log_path / f"test_{i}.log"
                 create_rc_log_file(log_file, np.random.random(100))
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.linspace(-0.1, 0.1, 5)
+                rc0_values=np.linspace(-0.1, 0.1, 5),
             )
 
             status = analyzer.check_run_status()
 
-            assert status['n_expected'] == 5
-            assert status['n_complete'] == 3
-            assert status['complete_fraction'] == 0.6
-            assert status['missing_windows'] == [3, 4]
+            assert status["n_expected"] == 5
+            assert status["n_complete"] == 3
+            assert status["complete_fraction"] == 0.6
+            assert status["missing_windows"] == [3, 4]
 
 
 # =============================================================================
 # Test EVBAnalyzer Statistical Methods
 # =============================================================================
+
 
 class TestEVBAnalyzerDetectEquilibration:
     """Tests for EVBAnalyzer equilibration detection."""
@@ -924,9 +930,7 @@ class TestEVBAnalyzerDetectEquilibration:
 
         # Generate correlated time series
         data = generate_correlated_timeseries(
-            n_frames=1000,
-            correlation_time=50,
-            seed=42
+            n_frames=1000, correlation_time=50, seed=42
         )
         t0, g, n_eff = EVBAnalyzer._detect_equilibration_autocorr(data)
 
@@ -944,9 +948,9 @@ class TestEVBAnalyzerDetectEquilibration:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             # Short trajectory should return default values
@@ -958,7 +962,9 @@ class TestEVBAnalyzerDetectEquilibration:
             assert results[0].g == 1.0
             assert results[0].n_effective == 5.0
 
-    def test_detect_equilibration_with_drift(self, synthetic_rc_data_with_equilibration):
+    def test_detect_equilibration_with_drift(
+        self, synthetic_rc_data_with_equilibration
+    ):
         """Test equilibration detection identifies drift period."""
         from molecular_simulations.simulate.free_energy import EVBAnalyzer
 
@@ -969,9 +975,9 @@ class TestEVBAnalyzerDetectEquilibration:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             results = analyzer.detect_equilibration(rc_data)
@@ -998,9 +1004,9 @@ class TestEVBAnalyzerCheckConvergence:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             # Generate very low variance data (should be converged)
@@ -1022,9 +1028,9 @@ class TestEVBAnalyzerCheckConvergence:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             # Generate high variance data with few samples
@@ -1047,9 +1053,9 @@ class TestEVBAnalyzerCheckConvergence:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             # Custom block size
@@ -1068,9 +1074,9 @@ class TestEVBAnalyzerCheckConvergence:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             # Create data with known block structure
@@ -1084,9 +1090,7 @@ class TestEVBAnalyzerCheckConvergence:
             expected_sem = np.std(block_values, ddof=1) / np.sqrt(10)
 
             assert results[0].sem == pytest.approx(expected_sem, rel=1e-5)
-            np.testing.assert_array_almost_equal(
-                results[0].block_means, block_values
-            )
+            np.testing.assert_array_almost_equal(results[0].block_means, block_values)
 
 
 class TestEVBAnalyzerAnalyzeOverlap:
@@ -1105,18 +1109,16 @@ class TestEVBAnalyzerAnalyzeOverlap:
 
         # Windows spaced by ~0.5*sigma should have good overlap
         rc0_values = np.linspace(-0.02, 0.02, 5)  # Spacing ~0.01 nm < sigma
-        rc_data = [
-            np.random.normal(rc0, sigma, 2000) for rc0 in rc0_values
-        ]
+        rc_data = [np.random.normal(rc0, sigma, 2000) for rc0 in rc0_values]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=k_umbrella,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer.analyze_overlap(rc_data)
@@ -1144,9 +1146,9 @@ class TestEVBAnalyzerAnalyzeOverlap:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([-0.1, 0.0, 0.1])
+                rc0_values=np.array([-0.1, 0.0, 0.1]),
             )
 
             result = analyzer.analyze_overlap(rc_data, min_overlap_threshold=0.03)
@@ -1164,9 +1166,9 @@ class TestEVBAnalyzerAnalyzeOverlap:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             rc_data = [np.random.random(100)]
@@ -1190,9 +1192,9 @@ class TestEVBAnalyzerAnalyzeOverlap:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0, 0.0])
+                rc0_values=np.array([0.0, 0.0]),
             )
 
             result = analyzer.analyze_overlap(rc_data)
@@ -1204,6 +1206,7 @@ class TestEVBAnalyzerAnalyzeOverlap:
 # =============================================================================
 # Test EVBAnalyzer PMF Calculation
 # =============================================================================
+
 
 class TestEVBAnalyzerComputePMF:
     """Tests for EVBAnalyzer.compute_pmf method."""
@@ -1217,9 +1220,9 @@ class TestEVBAnalyzerComputePMF:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             with pytest.raises(ValueError, match="No RC data provided"):
@@ -1236,16 +1239,18 @@ class TestEVBAnalyzerComputePMF:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             # Mock pymbar import to fail
-            with patch.dict(sys.modules, {'pymbar': None}):
+            with patch.dict(sys.modules, {"pymbar": None}):
                 # Force ImportError
-                with patch('molecular_simulations.simulate.free_energy.EVBAnalyzer._compute_pmf_mbar',
-                          side_effect=ImportError("No module named 'pymbar'")):
+                with patch(
+                    "molecular_simulations.simulate.free_energy.EVBAnalyzer._compute_pmf_mbar",
+                    side_effect=ImportError("No module named 'pymbar'"),
+                ):
                     result = analyzer.compute_pmf(rc_data)
 
             assert isinstance(result.bin_centers, np.ndarray)
@@ -1272,18 +1277,16 @@ class TestEVBAnalyzerComputePMFHistogram:
         sigma = np.sqrt(KB * temperature / k_umbrella)
 
         rc0_values = np.linspace(-0.1, 0.1, 5)
-        rc_data = [
-            np.random.normal(rc0, sigma, 2000) for rc0 in rc0_values
-        ]
+        rc_data = [np.random.normal(rc0, sigma, 2000) for rc0 in rc0_values]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=k_umbrella,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer._compute_pmf_histogram(
@@ -1312,18 +1315,16 @@ class TestEVBAnalyzerComputePMFHistogram:
         sigma = np.sqrt(KB * temperature / k_umbrella)
 
         rc0_values = np.linspace(-0.1, 0.1, 3)
-        rc_data = [
-            np.random.normal(rc0, sigma, 1000) for rc0 in rc0_values
-        ]
+        rc_data = [np.random.normal(rc0, sigma, 1000) for rc0 in rc0_values]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=k_umbrella,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             # Should not raise and should return valid result
@@ -1339,24 +1340,28 @@ class TestEVBAnalyzerComputePMFHistogram:
 # Test EVBAnalyzer Full Analysis Pipeline
 # =============================================================================
 
+
 class TestEVBAnalyzerRunFullAnalysis:
     """Tests for EVBAnalyzer.run_full_analysis method."""
 
     def test_run_full_analysis_complete(self, synthetic_rc_data):
         """Test complete analysis pipeline."""
-        from molecular_simulations.simulate.free_energy import EVBAnalyzer, EVBAnalysisResult
+        from molecular_simulations.simulate.free_energy import (
+            EVBAnalysisResult,
+            EVBAnalyzer,
+        )
 
         rc_data, rc0_values = synthetic_rc_data
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer.run_full_analysis(temperature=300.0)
@@ -1368,7 +1373,9 @@ class TestEVBAnalyzerRunFullAnalysis:
             assert len(result.equilibration) == len(rc_data)
             assert len(result.rc_data) == len(rc_data)
 
-    def test_run_full_analysis_discard_equilibration(self, synthetic_rc_data_with_equilibration):
+    def test_run_full_analysis_discard_equilibration(
+        self, synthetic_rc_data_with_equilibration
+    ):
         """Test analysis with equilibration discarding enabled."""
         from molecular_simulations.simulate.free_energy import EVBAnalyzer
 
@@ -1376,13 +1383,13 @@ class TestEVBAnalyzerRunFullAnalysis:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer.run_full_analysis(discard_equilibration=True)
@@ -1399,13 +1406,13 @@ class TestEVBAnalyzerRunFullAnalysis:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer.run_full_analysis(discard_equilibration=False)
@@ -1425,28 +1432,28 @@ class TestEVBAnalyzerSaveAnalysisResults:
         rc_data, rc0_values = synthetic_rc_data
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / 'logs'
+            log_path = Path(tmpdir) / "logs"
             log_path.mkdir()
-            output_path = Path(tmpdir) / 'results'
+            output_path = Path(tmpdir) / "results"
 
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
                 rc0_values=rc0_values,
-                output_path=output_path
+                output_path=output_path,
             )
 
             result = analyzer.run_full_analysis()
             analyzer.save_analysis_results(result, output_dir=output_path)
 
             # Check expected files exist
-            assert (output_path / 'test_pmf.csv').exists()
-            assert (output_path / 'test_window_free_energies.csv').exists()
-            assert (output_path / 'test_convergence.csv').exists()
-            assert (output_path / 'test_analysis_summary.txt').exists()
+            assert (output_path / "test_pmf.csv").exists()
+            assert (output_path / "test_window_free_energies.csv").exists()
+            assert (output_path / "test_convergence.csv").exists()
+            assert (output_path / "test_analysis_summary.txt").exists()
 
     def test_save_analysis_results_csv_content(self, synthetic_rc_data):
         """Test that saved CSV files have correct content."""
@@ -1456,35 +1463,36 @@ class TestEVBAnalyzerSaveAnalysisResults:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir)
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer.run_full_analysis()
             analyzer.save_analysis_results(result)
 
             # Read PMF CSV and verify columns
-            pmf_df = pl.read_csv(str(log_path / 'test_pmf.csv'))
-            assert 'RC' in pmf_df.columns
-            assert 'PMF_kJ_mol' in pmf_df.columns
-            assert 'uncertainty_kJ_mol' in pmf_df.columns
+            pmf_df = pl.read_csv(str(log_path / "test_pmf.csv"))
+            assert "RC" in pmf_df.columns
+            assert "PMF_kJ_mol" in pmf_df.columns
+            assert "uncertainty_kJ_mol" in pmf_df.columns
 
             # Read convergence CSV
-            conv_df = pl.read_csv(str(log_path / 'test_convergence.csv'))
-            assert 'window' in conv_df.columns
-            assert 'mean_rc' in conv_df.columns
-            assert 'sem' in conv_df.columns
-            assert 'is_converged' in conv_df.columns
+            conv_df = pl.read_csv(str(log_path / "test_convergence.csv"))
+            assert "window" in conv_df.columns
+            assert "mean_rc" in conv_df.columns
+            assert "sem" in conv_df.columns
+            assert "is_converged" in conv_df.columns
 
 
 # =============================================================================
 # Test Statistical Algorithms with Known Inputs/Outputs
 # =============================================================================
+
 
 class TestStatisticalAlgorithms:
     """Tests for statistical algorithms with known inputs/outputs."""
@@ -1498,9 +1506,9 @@ class TestStatisticalAlgorithms:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             # Create data where each block has a known mean
@@ -1524,9 +1532,9 @@ class TestStatisticalAlgorithms:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             # Constant data
@@ -1558,9 +1566,9 @@ class TestStatisticalAlgorithms:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0, 0.0])
+                rc0_values=np.array([0.0, 0.0]),
             )
 
             np.random.seed(42)
@@ -1582,16 +1590,16 @@ class TestStatisticalAlgorithms:
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([-1.0, 1.0])
+                rc0_values=np.array([-1.0, 1.0]),
             )
 
             np.random.seed(42)
             # Two completely separate distributions
             rc_data = [
                 np.random.normal(-1.0, 0.01, 1000),  # Very narrow at -1
-                np.random.normal(1.0, 0.01, 1000),   # Very narrow at +1
+                np.random.normal(1.0, 0.01, 1000),  # Very narrow at +1
             ]
 
             result = analyzer.analyze_overlap(rc_data, n_bins=50)
@@ -1603,6 +1611,7 @@ class TestStatisticalAlgorithms:
 # =============================================================================
 # Test Edge Cases
 # =============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
@@ -1616,13 +1625,13 @@ class TestEdgeCases:
 
             np.random.seed(42)
             rc_data = [np.random.normal(0, 0.01, 500)]
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0])
+                rc0_values=np.array([0.0]),
             )
 
             result = analyzer.run_full_analysis()
@@ -1640,13 +1649,13 @@ class TestEdgeCases:
 
             # Very short trajectories
             rc_data = [np.random.random(15) for _ in range(3)]
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.linspace(-0.1, 0.1, 3)
+                rc0_values=np.linspace(-0.1, 0.1, 3),
             )
 
             # Should handle without crashing
@@ -1662,16 +1671,14 @@ class TestEdgeCases:
 
             np.random.seed(42)
             rc0_values = np.array([-0.5, -0.3, -0.1])
-            rc_data = [
-                np.random.normal(rc0, 0.01, 500) for rc0 in rc0_values
-            ]
-            create_rc_log_files(log_path, 'test', rc_data)
+            rc_data = [np.random.normal(rc0, 0.01, 500) for rc0 in rc0_values]
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=rc0_values
+                rc0_values=rc0_values,
             )
 
             result = analyzer.run_full_analysis()
@@ -1689,13 +1696,13 @@ class TestEdgeCases:
             # Create very sparse data that might produce NaN PMF
             np.random.seed(42)
             rc_data = [np.array([0.0]), np.array([0.1])]  # Only 1 sample each
-            create_rc_log_files(log_path, 'test', rc_data)
+            create_rc_log_files(log_path, "test", rc_data)
 
             analyzer = EVBAnalyzer(
                 log_path=log_path,
-                log_prefix='test',
+                log_prefix="test",
                 k_umbrella=160000.0,
-                rc0_values=np.array([0.0, 0.1])
+                rc0_values=np.array([0.0, 0.1]),
             )
 
             # Should not crash even with sparse data

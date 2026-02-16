@@ -4,11 +4,12 @@ This module provides utility classes for embedding analysis data into
 PDB files, particularly for visualization of per-residue properties.
 """
 
+import shutil
+from pathlib import Path
+from typing import Union
+
 import MDAnalysis as mda
 import numpy as np
-from pathlib import Path
-import shutil
-from typing import Callable, Union
 
 OptPath = Union[Path, str, None]
 
@@ -36,16 +37,13 @@ class EmbedData:
         out: Output path. If None, uses the input PDB path.
 
     Example:
-        >>> data = {'protein': np.random.rand(100)}  # 100 residues
-        >>> embedder = EmbedData('structure.pdb', data)
+        >>> data = {"protein": np.random.rand(100)}  # 100 residues
+        >>> embedder = EmbedData("structure.pdb", data)
         >>> embedder.embed()
     """
 
     def __init__(
-        self,
-        pdb: Path,
-        embedding_dict: dict[str, np.ndarray],
-        out: OptPath = None
+        self, pdb: Path, embedding_dict: dict[str, np.ndarray], out: OptPath = None
     ):
         """Initialize the EmbedData instance.
 
@@ -57,7 +55,7 @@ class EmbedData:
         self.pdb = pdb if isinstance(pdb, Path) else Path(pdb)
         self.embeddings = embedding_dict
         self.out = out if out is not None else self.pdb
-        
+
         self.u = mda.Universe(str(self.pdb))
 
     def embed(self) -> None:
@@ -71,11 +69,7 @@ class EmbedData:
 
         self.write_new_pdb()
 
-    def embed_selection(
-        self,
-        selection: str,
-        data: np.ndarray
-    ) -> None:
+    def embed_selection(self, selection: str, data: np.ndarray) -> None:
         """Embed data into a specific selection's beta column.
 
         Args:
@@ -86,10 +80,8 @@ class EmbedData:
         sel = self.u.select_atoms(selection)
 
         for residue, datum in zip(sel.residues, data):
-            residue.atoms.tempfactors = np.full(
-                residue.atoms.tempfactors.shape, datum
-            )
-    
+            residue.atoms.tempfactors = np.full(residue.atoms.tempfactors.shape, datum)
+
     def write_new_pdb(self) -> None:
         """Write the modified PDB file.
 
@@ -98,11 +90,8 @@ class EmbedData:
         already exist to prevent overwriting the true original).
         """
         if self.out.exists():
-            if not self.pdb.with_suffix('.orig.pdb').exists():
-                shutil.copyfile(
-                    str(self.pdb), 
-                    str(self.pdb.with_suffix('.orig.pdb'))
-                )
+            if not self.pdb.with_suffix(".orig.pdb").exists():
+                shutil.copyfile(str(self.pdb), str(self.pdb.with_suffix(".orig.pdb")))
 
         with mda.Writer(str(self.out)) as W:
             W.write(self.u.atoms)
@@ -123,16 +112,13 @@ class EmbedEnergyData(EmbedData):
         out: Output path. If None, uses the input PDB path.
 
     Example:
-        >>> energies = {'chainA': energy_array}  # shape (n_frames, n_res, 2)
-        >>> embedder = EmbedEnergyData('structure.pdb', energies)
+        >>> energies = {"chainA": energy_array}  # shape (n_frames, n_res, 2)
+        >>> embedder = EmbedEnergyData("structure.pdb", energies)
         >>> embedder.embed()
     """
 
     def __init__(
-        self,
-        pdb: Path,
-        embedding_dict: dict[str, np.ndarray],
-        out: OptPath = None
+        self, pdb: Path, embedding_dict: dict[str, np.ndarray], out: OptPath = None
     ):
         """Initialize the EmbedEnergyData instance.
 
@@ -164,7 +150,7 @@ class EmbedEnergyData(EmbedData):
         for sel, data in self.embeddings.items():
             sanitized = self.sanitize_data(data)
             rescaled = sanitized / rescaling_factor
-            rescaled[np.where(rescaled > 1.)] = 1.
+            rescaled[np.where(rescaled > 1.0)] = 1.0
             new_embeddings[sel] = rescaled
 
         return new_embeddings
@@ -188,5 +174,5 @@ class EmbedEnergyData(EmbedData):
 
         if data.shape[1] > 1:
             data = np.sum(data, axis=1)
-        
+
         return data

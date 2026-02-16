@@ -20,13 +20,13 @@ The test strategy focuses on:
     2. Direct algorithm validation without I/O or external dependencies
     3. Edge cases (empty arrays, single samples, no overlap, etc.)
 """
+
 import sys
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from dataclasses import dataclass
-from typing import Callable
 
 # Constants matching free_energy.py
 KB = 8.314462618e-3  # Boltzmann constant in kJ/(mol*K)
@@ -35,6 +35,7 @@ KB = 8.314462618e-3  # Boltzmann constant in kJ/(mol*K)
 # =============================================================================
 # MODULE IMPORT SETUP
 # =============================================================================
+
 
 @pytest.fixture(autouse=True)
 def mock_free_energy_deps():
@@ -51,19 +52,23 @@ def mock_free_energy_deps():
     mock_reporters = MagicMock()
 
     # Patch sys.modules before import - use top-level module names
-    with patch.dict(sys.modules, {
-        'omm_simulator': mock_omm_simulator,
-        'reporters': mock_reporters,
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "omm_simulator": mock_omm_simulator,
+            "reporters": mock_reporters,
+        },
+    ):
         # Clear cached import if exists
-        if 'molecular_simulations.simulate.free_energy' in sys.modules:
-            del sys.modules['molecular_simulations.simulate.free_energy']
+        if "molecular_simulations.simulate.free_energy" in sys.modules:
+            del sys.modules["molecular_simulations.simulate.free_energy"]
         yield mock_omm_simulator, mock_reporters
 
 
 # =============================================================================
 # SYNTHETIC DATA GENERATORS
 # =============================================================================
+
 
 def generate_equilibrated_timeseries(
     n_samples: int = 1000,
@@ -213,8 +218,7 @@ def generate_overlapping_windows(
         # Use different seed for each window but deterministic
         window_seed = seed + i if seed is not None else None
         data = generate_umbrella_window_data(
-            rc0, k_umbrella, temperature, samples_per_window,
-            seed=window_seed
+            rc0, k_umbrella, temperature, samples_per_window, seed=window_seed
         )
         rc_data.append(data)
 
@@ -253,8 +257,7 @@ def generate_non_overlapping_windows(
     for i, rc0 in enumerate(rc0_values):
         window_seed = seed + i if seed is not None else None
         data = generate_umbrella_window_data(
-            rc0, k_umbrella, temperature, samples_per_window,
-            seed=window_seed
+            rc0, k_umbrella, temperature, samples_per_window, seed=window_seed
         )
         rc_data.append(data)
 
@@ -375,8 +378,8 @@ def generate_double_well_pmf_data(
         # With minima at +/- x_min and barrier at x=0
         x_min = abs(well_positions[1])
         if x_min > 0:
-            c = 2 * barrier_height / (x_min ** 2)
-            b = barrier_height / (x_min ** 4)
+            c = 2 * barrier_height / (x_min**2)
+            b = barrier_height / (x_min**4)
             pmf = b * x**4 - c * x**2 + barrier_height
         else:
             pmf = np.zeros_like(x)
@@ -419,6 +422,7 @@ def generate_double_well_pmf_data(
 # TEST FIXTURES
 # =============================================================================
 
+
 @pytest.fixture
 def analyzer_class(mock_free_energy_deps):
     """Import and return the EVBAnalyzer class.
@@ -427,6 +431,7 @@ def analyzer_class(mock_free_energy_deps):
     The autouse=True on mock_free_energy_deps ensures this runs first.
     """
     from molecular_simulations.simulate.free_energy import EVBAnalyzer
+
     return EVBAnalyzer
 
 
@@ -442,9 +447,12 @@ def equilibrated_data():
 def poorly_equilibrated_data():
     """Fixture providing time series with known equilibration time."""
     data, t0 = generate_poorly_equilibrated_timeseries(
-        n_samples=1000, equilibration_time=200,
-        initial_offset=0.5, equilibrium_mean=0.0,
-        equilibrium_std=0.05, seed=42
+        n_samples=1000,
+        equilibration_time=200,
+        initial_offset=0.5,
+        equilibrium_mean=0.0,
+        equilibrium_std=0.05,
+        seed=42,
     )
     return data, t0
 
@@ -459,10 +467,13 @@ def overlapping_windows():
     This ensures ~30%+ overlap between adjacent windows.
     """
     rc_data, rc0_values = generate_overlapping_windows(
-        n_windows=10, rc_min=-0.15, rc_max=0.15,
+        n_windows=10,
+        rc_min=-0.15,
+        rc_max=0.15,
         k_umbrella=1000.0,  # Softer restraint for good overlap
         temperature=300.0,
-        samples_per_window=1000, seed=42
+        samples_per_window=1000,
+        seed=42,
     )
     return rc_data, rc0_values
 
@@ -471,9 +482,12 @@ def overlapping_windows():
 def non_overlapping_windows():
     """Fixture providing umbrella sampling data without overlap."""
     rc_data, rc0_values = generate_non_overlapping_windows(
-        n_windows=5, window_spacing=0.5,
-        k_umbrella=1600000.0, temperature=300.0,
-        samples_per_window=500, seed=42
+        n_windows=5,
+        window_spacing=0.5,
+        k_umbrella=1600000.0,
+        temperature=300.0,
+        samples_per_window=500,
+        seed=42,
     )
     return rc_data, rc0_values
 
@@ -482,10 +496,15 @@ def non_overlapping_windows():
 def harmonic_pmf_data():
     """Fixture providing data for harmonic PMF recovery test."""
     return generate_harmonic_pmf_data(
-        n_windows=20, rc_min=-0.2, rc_max=0.2,
-        pmf_k=50.0, pmf_center=0.0,
-        k_umbrella=160000.0, temperature=300.0,
-        samples_per_window=2000, seed=42
+        n_windows=20,
+        rc_min=-0.2,
+        rc_max=0.2,
+        pmf_k=50.0,
+        pmf_center=0.0,
+        k_umbrella=160000.0,
+        temperature=300.0,
+        samples_per_window=2000,
+        seed=42,
     )
 
 
@@ -493,14 +512,14 @@ def harmonic_pmf_data():
 # TESTS: _detect_equilibration_autocorr
 # =============================================================================
 
+
 class TestDetectEquilibrationAutocorr:
     """Tests for the autocorrelation-based equilibration detection."""
 
     def test_well_equilibrated_returns_low_t0(self, analyzer_class):
         """Well-equilibrated data should have t0 near zero."""
         data = generate_equilibrated_timeseries(
-            n_samples=1000, mean=0.0, std=0.1,
-            correlation_time=5, seed=123
+            n_samples=1000, mean=0.0, std=0.1, correlation_time=5, seed=123
         )
 
         t0, g, n_eff = analyzer_class._detect_equilibration_autocorr(data)
@@ -514,9 +533,12 @@ class TestDetectEquilibrationAutocorr:
     def test_poorly_equilibrated_detects_drift(self, analyzer_class):
         """Poorly equilibrated data should detect equilibration time."""
         data, true_t0 = generate_poorly_equilibrated_timeseries(
-            n_samples=1000, equilibration_time=300,
-            initial_offset=1.0, equilibrium_mean=0.0,
-            equilibrium_std=0.05, seed=123
+            n_samples=1000,
+            equilibration_time=300,
+            initial_offset=1.0,
+            equilibrium_mean=0.0,
+            equilibrium_std=0.05,
+            seed=123,
         )
 
         t0, g, n_eff = analyzer_class._detect_equilibration_autocorr(data)
@@ -535,8 +557,9 @@ class TestDetectEquilibrationAutocorr:
 
         assert t0 == 0, "Constant data should have t0=0"
         assert g == pytest.approx(1.0), "Constant data should have g=1"
-        assert n_eff == pytest.approx(float(len(data))), \
+        assert n_eff == pytest.approx(float(len(data))), (
             "Constant data should have n_eff = n"
+        )
 
     def test_short_timeseries(self, analyzer_class):
         """Short time series should be handled gracefully."""
@@ -596,6 +619,7 @@ class TestDetectEquilibrationAutocorr:
 # TESTS: check_convergence
 # =============================================================================
 
+
 class TestCheckConvergence:
     """Tests for block averaging convergence analysis."""
 
@@ -636,7 +660,9 @@ class TestCheckConvergence:
         rc_data = [rng.normal(0.0, 0.5, 1000) for _ in range(3)]  # High variance
 
         results = analyzer.check_convergence(
-            rc_data, block_size=100, sem_threshold=0.001  # Very strict threshold
+            rc_data,
+            block_size=100,
+            sem_threshold=0.001,  # Very strict threshold
         )
 
         for r in results:
@@ -659,9 +685,9 @@ class TestCheckConvergence:
         results = analyzer.check_convergence(rc_data, block_size=block_size)
 
         # Block means should be: [4.5, 14.5, 24.5, ..., 94.5]
-        expected_block_means = np.array([
-            np.mean(np.arange(i * 10, (i + 1) * 10)) for i in range(10)
-        ])
+        expected_block_means = np.array(
+            [np.mean(np.arange(i * 10, (i + 1) * 10)) for i in range(10)]
+        )
 
         np.testing.assert_array_almost_equal(
             results[0].block_means, expected_block_means, decimal=10
@@ -677,11 +703,15 @@ class TestCheckConvergence:
         )
 
         # Known block means for easy verification
-        rc_data = [np.concatenate([
-            np.ones(100) * 1.0,
-            np.ones(100) * 2.0,
-            np.ones(100) * 3.0,
-        ])]  # Three blocks with means 1, 2, 3
+        rc_data = [
+            np.concatenate(
+                [
+                    np.ones(100) * 1.0,
+                    np.ones(100) * 2.0,
+                    np.ones(100) * 3.0,
+                ]
+            )
+        ]  # Three blocks with means 1, 2, 3
 
         results = analyzer.check_convergence(rc_data, block_size=100)
 
@@ -722,7 +752,9 @@ class TestCheckConvergence:
         # Very large block size would give < 3 blocks
         rc_data = [rng.normal(0, 0.1, 100)]
 
-        results = analyzer.check_convergence(rc_data, block_size=50)  # Would give 2 blocks
+        results = analyzer.check_convergence(
+            rc_data, block_size=50
+        )  # Would give 2 blocks
 
         assert results[0].n_blocks >= 3, "Should have at least 3 blocks"
 
@@ -730,6 +762,7 @@ class TestCheckConvergence:
 # =============================================================================
 # TESTS: analyze_overlap
 # =============================================================================
+
 
 class TestAnalyzeOverlap:
     """Tests for histogram overlap analysis between windows."""
@@ -745,16 +778,22 @@ class TestAnalyzeOverlap:
             rc0_values=rc0_values,
         )
 
-        result = analyzer.analyze_overlap(rc_data, n_bins=50, min_overlap_threshold=0.03)
+        result = analyzer.analyze_overlap(
+            rc_data, n_bins=50, min_overlap_threshold=0.03
+        )
 
         # Should have good overlap everywhere
-        assert result.min_overlap > 0.03, \
+        assert result.min_overlap > 0.03, (
             f"Expected min overlap > 0.03, got {result.min_overlap}"
-        assert len(result.problem_pairs) == 0, \
+        )
+        assert len(result.problem_pairs) == 0, (
             f"Expected no problem pairs, got {result.problem_pairs}"
+        )
         assert len(result.overlap_matrix) == len(rc_data) - 1
 
-    def test_no_overlap_detected(self, analyzer_class, tmp_path, non_overlapping_windows):
+    def test_no_overlap_detected(
+        self, analyzer_class, tmp_path, non_overlapping_windows
+    ):
         """Non-overlapping windows should be flagged."""
         rc_data, rc0_values = non_overlapping_windows
 
@@ -765,18 +804,19 @@ class TestAnalyzeOverlap:
             rc0_values=rc0_values,
         )
 
-        result = analyzer.analyze_overlap(rc_data, n_bins=50, min_overlap_threshold=0.03)
+        result = analyzer.analyze_overlap(
+            rc_data, n_bins=50, min_overlap_threshold=0.03
+        )
 
         # Should detect problems
-        assert result.min_overlap < 0.03, \
+        assert result.min_overlap < 0.03, (
             f"Expected min overlap < 0.03, got {result.min_overlap}"
+        )
         assert len(result.problem_pairs) > 0, "Should detect problem pairs"
 
     def test_overlap_values_in_valid_range(self, analyzer_class, tmp_path):
         """Overlap values should be between 0 and 1."""
-        rc_data, rc0_values = generate_overlapping_windows(
-            n_windows=5, seed=42
-        )
+        rc_data, rc0_values = generate_overlapping_windows(n_windows=5, seed=42)
 
         analyzer = analyzer_class(
             log_path=tmp_path,
@@ -808,15 +848,14 @@ class TestAnalyzeOverlap:
         result = analyzer.analyze_overlap(rc_data, n_bins=50)
 
         # Identical distributions should have overlap close to 1
-        assert result.overlap_matrix[0] > 0.95, \
+        assert result.overlap_matrix[0] > 0.95, (
             f"Identical distributions should have high overlap, got {result.overlap_matrix[0]}"
+        )
 
     def test_overlap_matrix_length(self, analyzer_class, tmp_path):
         """Overlap matrix should have n_windows - 1 elements."""
         n_windows = 7
-        rc_data, rc0_values = generate_overlapping_windows(
-            n_windows=n_windows, seed=42
-        )
+        rc_data, rc0_values = generate_overlapping_windows(n_windows=n_windows, seed=42)
 
         analyzer = analyzer_class(
             log_path=tmp_path,
@@ -857,6 +896,7 @@ class TestAnalyzeOverlap:
 # TESTS: _compute_pmf_histogram (WHAM)
 # =============================================================================
 
+
 class TestComputePMFHistogram:
     """Tests for WHAM-based PMF calculation."""
 
@@ -882,16 +922,18 @@ class TestComputePMFHistogram:
         # Ignore NaN values and edges
         valid = ~np.isnan(computed_pmf)
         # Only compare interior points (avoid edge effects)
-        interior = (result.bin_centers > rc0_values.min() + 0.02) & \
-                   (result.bin_centers < rc0_values.max() - 0.02)
+        interior = (result.bin_centers > rc0_values.min() + 0.02) & (
+            result.bin_centers < rc0_values.max() - 0.02
+        )
         mask = valid & interior
 
         if mask.sum() > 5:
             # Allow some tolerance - WHAM is approximate
             # Compare shapes by looking at correlation
             correlation = np.corrcoef(computed_pmf[mask], expected_pmf[mask])[0, 1]
-            assert correlation > 0.9, \
+            assert correlation > 0.9, (
                 f"PMF shape correlation {correlation} too low (expected > 0.9)"
+            )
 
     def test_pmf_minimum_is_zero(self, analyzer_class, tmp_path):
         """Computed PMF should be shifted so minimum is zero."""
@@ -912,15 +954,14 @@ class TestComputePMFHistogram:
 
         valid_pmf = result.pmf[~np.isnan(result.pmf)]
         if len(valid_pmf) > 0:
-            assert valid_pmf.min() == pytest.approx(0.0, abs=1e-10), \
+            assert valid_pmf.min() == pytest.approx(0.0, abs=1e-10), (
                 "PMF minimum should be shifted to zero"
+            )
 
     def test_pmf_result_structure(self, analyzer_class, tmp_path):
         """PMFResult should have correct structure and sizes."""
         n_bins = 25
-        rc_data, rc0_values = generate_overlapping_windows(
-            n_windows=10, seed=42
-        )
+        rc_data, rc0_values = generate_overlapping_windows(n_windows=10, seed=42)
 
         analyzer = analyzer_class(
             log_path=tmp_path,
@@ -964,9 +1005,7 @@ class TestComputePMFHistogram:
 
     def test_temperature_affects_pmf_scale(self, analyzer_class, tmp_path):
         """PMF magnitude should scale with temperature."""
-        rc_data, rc0_values = generate_overlapping_windows(
-            n_windows=10, seed=42
-        )
+        rc_data, rc0_values = generate_overlapping_windows(n_windows=10, seed=42)
 
         analyzer = analyzer_class(
             log_path=tmp_path,
@@ -1011,13 +1050,15 @@ class TestComputePMFHistogram:
 
         # Check that we got reasonable output (not all NaN)
         valid_count = (~np.isnan(result.pmf)).sum()
-        assert valid_count > len(result.pmf) // 2, \
+        assert valid_count > len(result.pmf) // 2, (
             "WHAM should produce mostly valid PMF values"
+        )
 
 
 # =============================================================================
 # EDGE CASE TESTS
 # =============================================================================
+
 
 class TestEdgeCases:
     """Tests for edge cases and boundary conditions."""
@@ -1157,6 +1198,7 @@ class TestEdgeCases:
 # INTEGRATION TESTS
 # =============================================================================
 
+
 class TestIntegration:
     """Integration tests combining multiple analysis steps."""
 
@@ -1227,7 +1269,7 @@ class TestIntegration:
 
         # Detect and remove equilibration
         equil = analyzer.detect_equilibration(rc_data)
-        rc_data_trimmed = [data[e.t0:] for data, e in zip(rc_data, equil)]
+        rc_data_trimmed = [data[e.t0 :] for data, e in zip(rc_data, equil)]
 
         # Check convergence after removing equilibration
         conv_after = analyzer.check_convergence(rc_data_trimmed)
@@ -1241,12 +1283,11 @@ class TestIntegration:
 # PARAMETRIZED TESTS
 # =============================================================================
 
+
 @pytest.mark.parametrize("n_samples", [50, 100, 500, 2000])
 def test_equilibration_detection_various_lengths(analyzer_class, n_samples):
     """Equilibration detection should work for various trajectory lengths."""
-    data = generate_equilibrated_timeseries(
-        n_samples=n_samples, seed=42
-    )
+    data = generate_equilibrated_timeseries(n_samples=n_samples, seed=42)
 
     t0, g, n_eff = analyzer_class._detect_equilibration_autocorr(data)
 
@@ -1276,9 +1317,7 @@ def test_statistical_inefficiency_scales_with_correlation(
 @pytest.mark.parametrize("n_windows", [3, 5, 10, 20])
 def test_overlap_analysis_various_window_counts(analyzer_class, tmp_path, n_windows):
     """Overlap analysis should work for various numbers of windows."""
-    rc_data, rc0_values = generate_overlapping_windows(
-        n_windows=n_windows, seed=42
-    )
+    rc_data, rc0_values = generate_overlapping_windows(n_windows=n_windows, seed=42)
 
     analyzer = analyzer_class(
         log_path=tmp_path,

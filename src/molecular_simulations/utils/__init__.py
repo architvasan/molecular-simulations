@@ -1,9 +1,11 @@
+import contextlib
+
 from .amber_utils import assign_chainids
 
-try:
-    from .parsl_settings import (AuroraSettings,
-                                 LocalSettings,
-                                 WorkstationSettings,
-                                 PolarisSettings)
-except ImportError:
-    pass
+with contextlib.suppress(ImportError):
+    from .parsl_settings import (
+        AuroraSettings,
+        LocalSettings,
+        PolarisSettings,
+        WorkstationSettings,
+    )

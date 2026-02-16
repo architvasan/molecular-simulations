@@ -1,10 +1,13 @@
-import MDAnalysis as mda
 import string
 
-def assign_chainids(u: mda.Universe,
-                    terminus_selection: str='name OXT') -> mda.Universe:
-    if not hasattr(u.atoms, 'chainIDs'):
-        u.add_TopologyAttr('chainIDs')
+import MDAnalysis as mda
+
+
+def assign_chainids(
+    u: mda.Universe, terminus_selection: str = "name OXT"
+) -> mda.Universe:
+    if not hasattr(u.atoms, "chainIDs"):
+        u.add_TopologyAttr("chainIDs")
 
     termini_atoms = u.select_atoms(terminus_selection)
     termini_resindices = set(termini_atoms.resindices)

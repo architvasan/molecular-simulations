@@ -4,20 +4,21 @@ Test configuration and fixtures.
 This module provides shared fixtures for the molecular-simulations test suite.
 Fixtures are designed to reduce mocking by providing real test data where possible.
 """
+
 import os
 from pathlib import Path
-import tempfile
 
 import pytest
 
 # Disable numba JIT compilation to avoid path resolution issues during testing.
 # This must be set before numba is imported.
-os.environ['NUMBA_DISABLE_JIT'] = '1'
+os.environ["NUMBA_DISABLE_JIT"] = "1"
 
 
 # ---------------------------------------------------------------------------
 # Path Helpers
 # ---------------------------------------------------------------------------
+
 
 def get_test_data_dir() -> Path:
     """Return the path to the test data directory."""
@@ -27,6 +28,7 @@ def get_test_data_dir() -> Path:
 # ---------------------------------------------------------------------------
 # Environment Detection Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def real_openmm_available() -> bool:
@@ -46,6 +48,7 @@ def real_openmm_available() -> bool:
     try:
         import openmm
         from openmm import Platform
+
         # Verify we can access at least one platform
         num_platforms = Platform.getNumPlatforms()
         return num_platforms > 0
@@ -64,13 +67,14 @@ def real_amber_available() -> bool:
     False otherwise.
     """
     import shutil
-    amberhome = os.environ.get('AMBERHOME')
+
+    amberhome = os.environ.get("AMBERHOME")
     if amberhome:
-        tleap_path = Path(amberhome) / 'bin' / 'tleap'
+        tleap_path = Path(amberhome) / "bin" / "tleap"
         if tleap_path.exists():
             return True
     # Also check if tleap is in PATH
-    return shutil.which('tleap') is not None
+    return shutil.which("tleap") is not None
 
 
 @pytest.fixture(scope="session")
@@ -83,8 +87,9 @@ def real_rdkit_available() -> bool:
     """
     try:
         from rdkit import Chem
+
         # Verify basic functionality
-        mol = Chem.MolFromSmiles('C')
+        mol = Chem.MolFromSmiles("C")
         return mol is not None
     except ImportError:
         return False
@@ -95,6 +100,7 @@ def real_rdkit_available() -> bool:
 # ---------------------------------------------------------------------------
 # PDB Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_pdb_path(tmp_path: Path) -> Path:
@@ -142,6 +148,7 @@ def alanine_dipeptide_pdb() -> Path:
 # ---------------------------------------------------------------------------
 # AMBER System File Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def amber_system_files(tmp_path: Path) -> dict:
@@ -281,15 +288,16 @@ Test system coordinates
     inpcrd_file.write_text(inpcrd_content)
 
     return {
-        'prmtop': prmtop_file,
-        'inpcrd': inpcrd_file,
-        'path': tmp_path,
+        "prmtop": prmtop_file,
+        "inpcrd": inpcrd_file,
+        "path": tmp_path,
     }
 
 
 # ---------------------------------------------------------------------------
 # Ligand/SDF Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def sample_sdf_path(tmp_path: Path) -> Path:
@@ -340,6 +348,7 @@ def benzene_sdf() -> Path:
 # ---------------------------------------------------------------------------
 # Skip Markers
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def skip_without_openmm(real_openmm_available):

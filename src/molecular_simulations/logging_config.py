@@ -5,11 +5,11 @@ and examples. Library code should not call this implicitly.
 """
 
 from __future__ import annotations
+
 import logging
 import logging.config
 import os
 import socket
-from datetime import datetime
 
 
 def configure_logging(
@@ -32,12 +32,16 @@ def configure_logging(
             variable or a default format including hostname, PID, and MPI rank.
 
     Example:
-        >>> configure_logging(level='DEBUG', to_file='simulation.log')
+        >>> configure_logging(level="DEBUG", to_file="simulation.log")
     """
-    level = (level or os.getenv("MS_LOG_LEVEL") or "INFO")
-    fmt = fmt or os.getenv("MS_LOG_FMT") or (
-        "%(asctime)s | %(levelname)s | %(name)s | %(message)s "
-        "[host=%(hostname)s pid=%(process)d rank=%(mpirank)s]"
+    level = level or os.getenv("MS_LOG_LEVEL") or "INFO"
+    fmt = (
+        fmt
+        or os.getenv("MS_LOG_FMT")
+        or (
+            "%(asctime)s | %(levelname)s | %(name)s | %(message)s "
+            "[host=%(hostname)s pid=%(process)d rank=%(mpirank)s]"
+        )
     )
 
     class _ContextFilter(logging.Filter):
@@ -55,7 +59,8 @@ def configure_logging(
             record.hostname = socket.gethostname()
             # Fill MPI rank if available; else 0
             try:
-                from mpi4py import MPI  # noqa: WPS433
+                from mpi4py import MPI
+
                 record.mpirank = MPI.COMM_WORLD.Get_rank()
             except Exception:
                 record.mpirank = 0

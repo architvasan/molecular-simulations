@@ -1,27 +1,31 @@
 """Free energy calculations using Empirical Valence Bond (EVB) methods."""
 
-from copy import deepcopy
-from dataclasses import dataclass
 import logging
-import MDAnalysis as mda
-from natsort import natsorted
-import numpy as np
-from openmm import (Context,
-                    CustomBondForce,
-                    CustomCompoundBondForce,
-                    HarmonicBondForce,
-                    VerletIntegrator)
-from openmm.unit import angstrom, kilojoules_per_mole
-import parsl
-from parsl import python_app, Config
+from collections.abc import Callable
+from dataclasses import dataclass
+from importlib.util import find_spec
 from pathlib import Path
+
+import MDAnalysis as mda
+import numpy as np
+import parsl
 import polars as pl
+from natsort import natsorted
+from openmm import (
+    CustomBondForce,
+    CustomCompoundBondForce,
+    HarmonicBondForce,
+)
+from parsl import Config, python_app
+
 try:
     import tomllib  # Python 3.11+
 except ModuleNotFoundError:
     import tomli as tomllib  # Python 3.10
+
 import traceback
-from typing import Any, Callable, Optional, Type, TypeVar
+from typing import Any, TypeVar
+
 from .omm_simulator import Simulator
 from .reporters import RCReporter
 
@@ -30,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Constants
 KB = 8.314462618e-3  # Boltzmann constant in kJ/(mol·K)
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 @dataclass
@@ -44,6 +48,7 @@ class PMFResult:
         free_energies: Raw free energies for each window from MBAR (kJ/mol).
         free_energy_uncertainty: Uncertainty in window free energies (kJ/mol).
     """
+
     bin_centers: np.ndarray
     pmf: np.ndarray
     pmf_uncertainty: np.ndarray
@@ -63,6 +68,7 @@ class ConvergenceResult:
         block_means: Mean RC for each block.
         is_converged: Whether the window appears converged (SEM < threshold).
     """
+
     window_idx: int
     mean_rc: float
     sem: float
@@ -80,6 +86,7 @@ class OverlapResult:
         min_overlap: Minimum overlap value (should be > 0.03 for MBAR).
         problem_pairs: List of window pairs with insufficient overlap.
     """
+
     overlap_matrix: np.ndarray
     min_overlap: float
     problem_pairs: list[tuple[int, int]]
@@ -96,6 +103,7 @@ class EquilibrationResult:
         n_effective: Effective number of uncorrelated samples.
         fraction_discarded: Fraction of trajectory discarded as equilibration.
     """
+
     window_idx: int
     t0: int
     g: float
@@ -116,6 +124,7 @@ class EVBAnalysisResult:
         temperature: Temperature used for analysis (K).
         k_umbrella: Umbrella force constant used (kJ/mol/nm²).
     """
+
     pmf: PMFResult
     convergence: list[ConvergenceResult]
     overlap: OverlapResult
@@ -142,25 +151,27 @@ class EVBAnalyzer:
     Example:
         >>> # Analyze existing EVB run
         >>> analyzer = EVBAnalyzer(
-        ...     log_path=Path('/scratch/evb_run/logs'),
-        ...     log_prefix='reactant',
+        ...     log_path=Path("/scratch/evb_run/logs"),
+        ...     log_prefix="reactant",
         ...     k_umbrella=160000.0,  # Must match what was used in simulation
-        ...     rc0_values=np.linspace(-0.2, 0.2, 50)  # Window centers
+        ...     rc0_values=np.linspace(-0.2, 0.2, 50),  # Window centers
         ... )
         >>> result = analyzer.run_full_analysis(temperature=300.0)
         >>> print(f"Barrier: {result.pmf.pmf.max():.2f} kJ/mol")
 
         >>> # Or load from a metadata file saved during simulation
-        >>> analyzer = EVBAnalyzer.from_metadata('/scratch/evb_run/evb_metadata.toml')
+        >>> analyzer = EVBAnalyzer.from_metadata("/scratch/evb_run/evb_metadata.toml")
         >>> result = analyzer.run_full_analysis()
     """
 
-    def __init__(self,
-                 log_path: Path,
-                 log_prefix: str,
-                 k_umbrella: float,
-                 rc0_values: np.ndarray,
-                 output_path: Optional[Path] = None):
+    def __init__(
+        self,
+        log_path: Path,
+        log_prefix: str,
+        k_umbrella: float,
+        rc0_values: np.ndarray,
+        output_path: Path | None = None,
+    ):
         """Initialize the EVB analyzer.
 
         Args:
@@ -180,7 +191,7 @@ class EVBAnalyzer:
             raise FileNotFoundError(f"Log path does not exist: {self.log_path}")
 
     @classmethod
-    def from_metadata(cls, metadata_path: Path) -> 'EVBAnalyzer':
+    def from_metadata(cls, metadata_path: Path) -> "EVBAnalyzer":
         """Create analyzer from a metadata TOML file.
 
         The metadata file should contain the parameters used during simulation.
@@ -200,21 +211,21 @@ class EVBAnalyzer:
             rc0_values = [-0.2, -0.19, ..., 0.2]
         """
         metadata_path = Path(metadata_path)
-        with open(metadata_path, 'rb') as f:
+        with open(metadata_path, "rb") as f:
             config = tomllib.load(f)
 
-        evb_config = config.get('evb', config)  # Support nested or flat structure
+        evb_config = config.get("evb", config)  # Support nested or flat structure
 
         return cls(
-            log_path=Path(evb_config['log_path']),
-            log_prefix=evb_config['log_prefix'],
-            k_umbrella=evb_config['k_umbrella'],
-            rc0_values=np.array(evb_config['rc0_values']),
-            output_path=evb_config.get('output_path')
+            log_path=Path(evb_config["log_path"]),
+            log_prefix=evb_config["log_prefix"],
+            k_umbrella=evb_config["k_umbrella"],
+            rc0_values=np.array(evb_config["rc0_values"]),
+            output_path=evb_config.get("output_path"),
         )
 
     @classmethod
-    def from_evb_instance(cls, evb: 'EVB') -> 'EVBAnalyzer':
+    def from_evb_instance(cls, evb: "EVB") -> "EVBAnalyzer":
         """Create analyzer from an existing EVB instance.
 
         Useful when you want to decouple analysis from the simulation object.
@@ -230,10 +241,10 @@ class EVBAnalyzer:
             log_prefix=evb.log_prefix,
             k_umbrella=evb.k,
             rc0_values=evb.reaction_coordinate,
-            output_path=evb.log_path
+            output_path=evb.log_path,
         )
 
-    def save_metadata(self, output_path: Optional[Path] = None) -> Path:
+    def save_metadata(self, output_path: Path | None = None) -> Path:
         """Save analyzer parameters to a TOML file for later reuse.
 
         Args:
@@ -242,10 +253,10 @@ class EVBAnalyzer:
         Returns:
             Path to saved metadata file.
         """
-        output_path = output_path or (self.log_path / 'evb_metadata.toml')
+        output_path = output_path or (self.log_path / "evb_metadata.toml")
 
         # tomllib is read-only, so write manually
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write("[evb]\n")
             f.write(f'log_path = "{self.log_path}"\n')
             f.write(f'log_prefix = "{self.log_prefix}"\n')
@@ -270,17 +281,21 @@ class EVBAnalyzer:
         n_windows = len(self.reaction_coordinate)
 
         for i in range(n_windows):
-            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
+            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
             if not rc_log.exists():
                 raise FileNotFoundError(
                     f"RC log file not found: {rc_log}. "
                     f"Expected {n_windows} windows based on rc0_values."
                 )
-            rc_contents = pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy().flatten()
+            rc_contents = (
+                pl.read_csv(str(rc_log)).select(pl.col("rc")).to_numpy().flatten()
+            )
             rc_data.append(rc_contents)
             logger.debug(f"Loaded window {i}: {len(rc_contents)} frames")
 
-        logger.info(f"Loaded {n_windows} windows with {sum(len(rc) for rc in rc_data)} total frames")
+        logger.info(
+            f"Loaded {n_windows} windows with {sum(len(rc) for rc in rc_data)} total frames"
+        )
         return rc_data
 
     def get_available_windows(self) -> list[int]:
@@ -293,7 +308,7 @@ class EVBAnalyzer:
         """
         available = []
         for i in range(len(self.reaction_coordinate)):
-            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
+            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
             if rc_log.exists():
                 available.append(i)
         return available
@@ -314,7 +329,7 @@ class EVBAnalyzer:
 
         frames_per_window = {}
         for i in available:
-            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
+            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
             try:
                 n_frames = len(pl.read_csv(str(rc_log)))
                 frames_per_window[i] = n_frames
@@ -322,18 +337,20 @@ class EVBAnalyzer:
                 frames_per_window[i] = f"Error: {e}"
 
         return {
-            'n_expected': n_expected,
-            'n_complete': len(available),
-            'complete_fraction': len(available) / n_expected if n_expected > 0 else 0,
-            'missing_windows': missing,
-            'frames_per_window': frames_per_window,
-            'total_frames': sum(v for v in frames_per_window.values() if isinstance(v, int))
+            "n_expected": n_expected,
+            "n_complete": len(available),
+            "complete_fraction": len(available) / n_expected if n_expected > 0 else 0,
+            "missing_windows": missing,
+            "frames_per_window": frames_per_window,
+            "total_frames": sum(
+                v for v in frames_per_window.values() if isinstance(v, int)
+            ),
         }
 
     @staticmethod
-    def _detect_equilibration_autocorr(data: np.ndarray,
-                                       max_lag: Optional[int] = None
-                                       ) -> tuple[int, float, float]:
+    def _detect_equilibration_autocorr(
+        data: np.ndarray, max_lag: int | None = None
+    ) -> tuple[int, float, float]:
         """Detect equilibration using autocorrelation analysis.
 
         See EVB._detect_equilibration_autocorr for full documentation.
@@ -348,8 +365,8 @@ class EVBAnalyzer:
         if variance < 1e-10:
             return 0, 1.0, float(n)
 
-        autocorr = np.correlate(data_normalized, data_normalized, mode='full')
-        autocorr = autocorr[n - 1:] / (variance * n)
+        autocorr = np.correlate(data_normalized, data_normalized, mode="full")
+        autocorr = autocorr[n - 1 :] / (variance * n)
 
         g = 1.0
         for t in range(1, min(max_lag, n)):
@@ -371,8 +388,10 @@ class EVBAnalyzer:
             if var_subset < 1e-10:
                 continue
 
-            autocorr_subset = np.correlate(subset_norm, subset_norm, mode='full')
-            autocorr_subset = autocorr_subset[len(subset) - 1:] / (var_subset * len(subset))
+            autocorr_subset = np.correlate(subset_norm, subset_norm, mode="full")
+            autocorr_subset = autocorr_subset[len(subset) - 1 :] / (
+                var_subset * len(subset)
+            )
 
             g_subset = 1.0
             for t in range(1, min(max_lag, len(subset))):
@@ -389,35 +408,46 @@ class EVBAnalyzer:
 
         return best_t0, g, best_n_eff
 
-    def detect_equilibration(self,
-                             rc_data: list[np.ndarray]
-                             ) -> list[EquilibrationResult]:
+    def detect_equilibration(
+        self, rc_data: list[np.ndarray]
+    ) -> list[EquilibrationResult]:
         """Detect equilibration time for each window."""
         results = []
         for i, rc in enumerate(rc_data):
             if len(rc) < 10:
-                results.append(EquilibrationResult(
-                    window_idx=i, t0=0, g=1.0,
-                    n_effective=float(len(rc)), fraction_discarded=0.0
-                ))
+                results.append(
+                    EquilibrationResult(
+                        window_idx=i,
+                        t0=0,
+                        g=1.0,
+                        n_effective=float(len(rc)),
+                        fraction_discarded=0.0,
+                    )
+                )
                 continue
 
             t0, g, n_eff = self._detect_equilibration_autocorr(rc)
-            results.append(EquilibrationResult(
-                window_idx=i, t0=t0, g=g,
-                n_effective=n_eff, fraction_discarded=t0 / len(rc)
-            ))
+            results.append(
+                EquilibrationResult(
+                    window_idx=i,
+                    t0=t0,
+                    g=g,
+                    n_effective=n_eff,
+                    fraction_discarded=t0 / len(rc),
+                )
+            )
 
             if t0 > len(rc) * 0.5:
                 logger.warning(f"Window {i}: >50% discarded as equilibration")
 
         return results
 
-    def check_convergence(self,
-                          rc_data: list[np.ndarray],
-                          block_size: Optional[int] = None,
-                          sem_threshold: float = 0.01
-                          ) -> list[ConvergenceResult]:
+    def check_convergence(
+        self,
+        rc_data: list[np.ndarray],
+        block_size: int | None = None,
+        sem_threshold: float = 0.01,
+    ) -> list[ConvergenceResult]:
         """Check convergence of each window using block averaging."""
         results = []
         for i, rc in enumerate(rc_data):
@@ -429,23 +459,31 @@ class EVBAnalyzer:
                 n_blocks = max(3, n_blocks)
                 bs = n // n_blocks
 
-            block_means = np.array([rc[j * bs:(j + 1) * bs].mean() for j in range(n_blocks)])
+            block_means = np.array(
+                [rc[j * bs : (j + 1) * bs].mean() for j in range(n_blocks)]
+            )
             mean_rc = np.mean(block_means)
             sem = np.std(block_means, ddof=1) / np.sqrt(n_blocks)
 
-            results.append(ConvergenceResult(
-                window_idx=i, mean_rc=mean_rc, sem=sem,
-                n_blocks=n_blocks, block_means=block_means,
-                is_converged=sem < sem_threshold
-            ))
+            results.append(
+                ConvergenceResult(
+                    window_idx=i,
+                    mean_rc=mean_rc,
+                    sem=sem,
+                    n_blocks=n_blocks,
+                    block_means=block_means,
+                    is_converged=sem < sem_threshold,
+                )
+            )
 
         return results
 
-    def analyze_overlap(self,
-                        rc_data: list[np.ndarray],
-                        n_bins: int = 50,
-                        min_overlap_threshold: float = 0.03
-                        ) -> OverlapResult:
+    def analyze_overlap(
+        self,
+        rc_data: list[np.ndarray],
+        n_bins: int = 50,
+        min_overlap_threshold: float = 0.03,
+    ) -> OverlapResult:
         """Analyze overlap between adjacent umbrella windows."""
         n_windows = len(rc_data)
         overlap_matrix = np.zeros(n_windows - 1)
@@ -467,14 +505,12 @@ class EVBAnalyzer:
         return OverlapResult(
             overlap_matrix=overlap_matrix,
             min_overlap=overlap_matrix.min() if len(overlap_matrix) > 0 else 0.0,
-            problem_pairs=problem_pairs
+            problem_pairs=problem_pairs,
         )
 
-    def compute_pmf(self,
-                    rc_data: list[np.ndarray],
-                    temperature: float = 300.0,
-                    n_bins: int = 50
-                    ) -> PMFResult:
+    def compute_pmf(
+        self, rc_data: list[np.ndarray], temperature: float = 300.0, n_bins: int = 50
+    ) -> PMFResult:
         """Compute PMF using MBAR (preferred) or WHAM fallback."""
         if not rc_data:
             raise ValueError("No RC data provided")
@@ -482,19 +518,19 @@ class EVBAnalyzer:
         n_windows = len(rc_data)
         rc0_values = self.reaction_coordinate[:n_windows]
 
-        try:
-            import pymbar
+        if find_spec('pymbar') is not None:
             return self._compute_pmf_mbar(rc_data, rc0_values, temperature, n_bins)
-        except ImportError:
+        else:
             logger.warning("pymbar not available, using WHAM fallback")
             return self._compute_pmf_histogram(rc_data, rc0_values, temperature, n_bins)
 
-    def _compute_pmf_mbar(self,
-                          rc_data: list[np.ndarray],
-                          rc0_values: np.ndarray,
-                          temperature: float,
-                          n_bins: int
-                          ) -> PMFResult:
+    def _compute_pmf_mbar(
+        self,
+        rc_data: list[np.ndarray],
+        rc0_values: np.ndarray,
+        temperature: float,
+        n_bins: int,
+    ) -> PMFResult:
         """Compute PMF using MBAR."""
         import pymbar
 
@@ -512,8 +548,8 @@ class EVBAnalyzer:
         mbar = pymbar.MBAR(u_kn, N_k, verbose=False)
 
         results = mbar.compute_free_energy_differences()
-        free_energies = results['Delta_f'][0, :]
-        free_energy_uncertainty = results['dDelta_f'][0, :]
+        free_energies = results["Delta_f"][0, :]
+        free_energy_uncertainty = results["dDelta_f"][0, :]
 
         rc_min, rc_max = rc_all.min(), rc_all.max()
         bin_edges = np.linspace(rc_min, rc_max, n_bins + 1)
@@ -536,16 +572,20 @@ class EVBAnalyzer:
         pmf_uncertainty = np.full(n_bins, np.mean(free_energy_uncertainty))
 
         return PMFResult(
-            bin_centers=bin_centers, pmf=pmf, pmf_uncertainty=pmf_uncertainty,
-            free_energies=free_energies, free_energy_uncertainty=free_energy_uncertainty
+            bin_centers=bin_centers,
+            pmf=pmf,
+            pmf_uncertainty=pmf_uncertainty,
+            free_energies=free_energies,
+            free_energy_uncertainty=free_energy_uncertainty,
         )
 
-    def _compute_pmf_histogram(self,
-                               rc_data: list[np.ndarray],
-                               rc0_values: np.ndarray,
-                               temperature: float,
-                               n_bins: int
-                               ) -> PMFResult:
+    def _compute_pmf_histogram(
+        self,
+        rc_data: list[np.ndarray],
+        rc0_values: np.ndarray,
+        temperature: float,
+        n_bins: int,
+    ) -> PMFResult:
         """Compute PMF using WHAM iteration."""
         beta = 1.0 / (KB * temperature)
         n_windows = len(rc_data)
@@ -562,7 +602,7 @@ class EVBAnalyzer:
         f_k = np.zeros(n_windows)
         N_k = np.array([len(rc) for rc in rc_data])
 
-        for iteration in range(1000):
+        for _ in range(1000):
             f_k_old = f_k.copy()
             denom = np.zeros(n_bins)
             for k in range(n_windows):
@@ -594,20 +634,22 @@ class EVBAnalyzer:
         pmf -= np.nanmin(pmf)
 
         return PMFResult(
-            bin_centers=bin_centers, pmf=pmf,
+            bin_centers=bin_centers,
+            pmf=pmf,
             pmf_uncertainty=np.full(n_bins, 0.5),
             free_energies=f_k * KB * temperature,
-            free_energy_uncertainty=np.full(n_windows, 0.5)
+            free_energy_uncertainty=np.full(n_windows, 0.5),
         )
 
-    def run_full_analysis(self,
-                          temperature: float = 300.0,
-                          n_bins: int = 50,
-                          block_size: Optional[int] = None,
-                          sem_threshold: float = 0.01,
-                          overlap_threshold: float = 0.03,
-                          discard_equilibration: bool = True
-                          ) -> EVBAnalysisResult:
+    def run_full_analysis(
+        self,
+        temperature: float = 300.0,
+        n_bins: int = 50,
+        block_size: int | None = None,
+        sem_threshold: float = 0.01,
+        overlap_threshold: float = 0.03,
+        discard_equilibration: bool = True,
+    ) -> EVBAnalysisResult:
         """Run comprehensive free energy analysis.
 
         This is the main entry point for analyzing existing EVB data.
@@ -631,7 +673,7 @@ class EVBAnalyzer:
         # Equilibration
         equilibration = self.detect_equilibration(rc_data_raw)
         if discard_equilibration:
-            rc_data = [rc[eq.t0:] for rc, eq in zip(rc_data_raw, equilibration)]
+            rc_data = [rc[eq.t0 :] for rc, eq in zip(rc_data_raw, equilibration, strict=True)]
             n_discarded = sum(eq.t0 for eq in equilibration)
             n_total = sum(len(rc) for rc in rc_data_raw)
             logger.info(f"Discarded {n_discarded}/{n_total} frames as equilibration")
@@ -646,58 +688,73 @@ class EVBAnalyzer:
         # Overlap
         overlap = self.analyze_overlap(rc_data, n_bins, overlap_threshold)
         if overlap.problem_pairs:
-            logger.warning(f"Found {len(overlap.problem_pairs)} pairs with insufficient overlap")
+            logger.warning(
+                f"Found {len(overlap.problem_pairs)} pairs with insufficient overlap"
+            )
 
         # PMF
         pmf = self.compute_pmf(rc_data, temperature, n_bins)
         valid_pmf = pmf.pmf[~np.isnan(pmf.pmf)]
         if len(valid_pmf) > 0:
             barrier = valid_pmf.max()
-            logger.info(f"Barrier: {barrier:.2f} kJ/mol ({barrier/4.184:.2f} kcal/mol)")
+            logger.info(
+                f"Barrier: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)"
+            )
 
         return EVBAnalysisResult(
-            pmf=pmf, convergence=convergence, overlap=overlap,
-            equilibration=equilibration, rc_data=rc_data,
-            temperature=temperature, k_umbrella=self.k
+            pmf=pmf,
+            convergence=convergence,
+            overlap=overlap,
+            equilibration=equilibration,
+            rc_data=rc_data,
+            temperature=temperature,
+            k_umbrella=self.k,
         )
 
-    def save_analysis_results(self,
-                              result: EVBAnalysisResult,
-                              output_dir: Optional[Path] = None
-                              ) -> None:
+    def save_analysis_results(
+        self, result: EVBAnalysisResult, output_dir: Path | None = None
+    ) -> None:
         """Save analysis results to files."""
         output_dir = Path(output_dir) if output_dir else self.output_path
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # PMF
-        pmf_df = pl.DataFrame({
-            'RC': result.pmf.bin_centers,
-            'PMF_kJ_mol': result.pmf.pmf,
-            'uncertainty_kJ_mol': result.pmf.pmf_uncertainty
-        })
-        pmf_df.write_csv(str(output_dir / f'{self.log_prefix}_pmf.csv'))
+        pmf_df = pl.DataFrame(
+            {
+                "RC": result.pmf.bin_centers,
+                "PMF_kJ_mol": result.pmf.pmf,
+                "uncertainty_kJ_mol": result.pmf.pmf_uncertainty,
+            }
+        )
+        pmf_df.write_csv(str(output_dir / f"{self.log_prefix}_pmf.csv"))
 
         # Window free energies
-        fe_df = pl.DataFrame({
-            'window': list(range(len(result.pmf.free_energies))),
-            'rc0': self.reaction_coordinate[:len(result.pmf.free_energies)].tolist(),
-            'free_energy_kJ_mol': result.pmf.free_energies,
-            'uncertainty_kJ_mol': result.pmf.free_energy_uncertainty
-        })
-        fe_df.write_csv(str(output_dir / f'{self.log_prefix}_window_free_energies.csv'))
+        fe_df = pl.DataFrame(
+            {
+                "window": list(range(len(result.pmf.free_energies))),
+                "rc0": self.reaction_coordinate[
+                    : len(result.pmf.free_energies)
+                ].tolist(),
+                "free_energy_kJ_mol": result.pmf.free_energies,
+                "uncertainty_kJ_mol": result.pmf.free_energy_uncertainty,
+            }
+        )
+        fe_df.write_csv(str(output_dir / f"{self.log_prefix}_window_free_energies.csv"))
 
         # Convergence
-        conv_df = pl.DataFrame({
-            'window': [c.window_idx for c in result.convergence],
-            'mean_rc': [c.mean_rc for c in result.convergence],
-            'sem': [c.sem for c in result.convergence],
-            'is_converged': [c.is_converged for c in result.convergence]
-        })
-        conv_df.write_csv(str(output_dir / f'{self.log_prefix}_convergence.csv'))
+        conv_df = pl.DataFrame(
+            {
+                "window": [c.window_idx for c in result.convergence],
+                "mean_rc": [c.mean_rc for c in result.convergence],
+                "sem": [c.sem for c in result.convergence],
+                "is_converged": [c.is_converged for c in result.convergence],
+            }
+        )
+        conv_df.write_csv(str(output_dir / f"{self.log_prefix}_convergence.csv"))
 
         # Summary
-        summary_path = output_dir / f'{self.log_prefix}_analysis_summary.txt'
-        with open(summary_path, 'w') as f:
+        summary_path = output_dir / f"{self.log_prefix}_analysis_summary.txt"
+        with open(summary_path, "w") as f:
             f.write("EVB Free Energy Analysis Summary\n")
             f.write("=" * 50 + "\n\n")
             f.write(f"Temperature: {result.temperature} K\n")
@@ -709,26 +766,29 @@ class EVBAnalyzer:
                 f.write(f"Barrier height: {valid_pmf.max():.2f} kJ/mol\n")
                 f.write(f"              = {valid_pmf.max() / 4.184:.2f} kcal/mol\n\n")
 
-            f.write(f"Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} converged\n")
+            f.write(
+                f"Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} converged\n"
+            )
             f.write(f"Minimum overlap: {result.overlap.min_overlap:.3f}\n")
 
         logger.info(f"Results saved to {output_dir}")
 
 
 @python_app
-def run_evb_window(topology: Path,
-                   coord_file: Path,
-                   out_path: Path,
-                   rc_file: Path,
-                   umbrella_force: dict[str, int | float],
-                   morse_bond: dict[str, int | float],
-                   rc_freq: int,
-                   steps: int,
-                   dt: float,
-                   platform: str,
-                   restraint_sel: str | None) -> None:
-    """Parsl python app. Separate module due to need for serialization.
-    """
+def run_evb_window(
+    topology: Path,
+    coord_file: Path,
+    out_path: Path,
+    rc_file: Path,
+    umbrella_force: dict[str, int | float],
+    morse_bond: dict[str, int | float],
+    rc_freq: int,
+    steps: int,
+    dt: float,
+    platform: str,
+    restraint_sel: str | None,
+) -> None:
+    """Parsl python app. Separate module due to need for serialization."""
     evb = EVBCalculation(
         topology=topology,
         coord_file=coord_file,
@@ -740,36 +800,39 @@ def run_evb_window(topology: Path,
         steps=steps,
         dt=dt,
         platform=platform,
-        restraint_sel=restraint_sel
+        restraint_sel=restraint_sel,
     )
 
     evb.run()
+
 
 class EVB:
     """EVB orchestrator. Sets up full EVB run for a set of reactants or products,
     and distributes calculations using Parsl."""
 
-    def __init__(self,
-                 topology: Path,
-                 coordinates: Path,
-                 donor_atom: str,
-                 acceptor_atom: str,
-                 reactive_atom: str,
-                 parsl_config: Config,
-                 log_path: Path,
-                 log_prefix: str='reactant',
-                 rc_write_freq: int=5,
-                 steps: int=500000,
-                 dt: float=0.002,
-                 k: float=160000.0,        # Umbrella force constant (kJ/mol/nm^2)
-                 k_path: float=100.0,      # Path restraint force constant (kJ/mol)
-                 D_e: float=392.46,        # Morse well depth (kJ/mol) - from BDE
-                 alpha: float=13.275,      # Morse width parameter (nm^-1) - computed from sqrt(k_bond/(2*D_e))
-                 r0: float=0.109,          # Equilibrium bond distance (nm)
-                 platform: str='CUDA',
-                 n_windows: int=50,
-                 reaction_coordinate: Optional[list[float]]=None,
-                 restraint_sel: Optional[str]=None):
+    def __init__(
+        self,
+        topology: Path,
+        coordinates: Path,
+        donor_atom: str,
+        acceptor_atom: str,
+        reactive_atom: str,
+        parsl_config: Config,
+        log_path: Path,
+        log_prefix: str = "reactant",
+        rc_write_freq: int = 5,
+        steps: int = 500000,
+        dt: float = 0.002,
+        k: float = 160000.0,  # Umbrella force constant (kJ/mol/nm^2)
+        k_path: float = 100.0,  # Path restraint force constant (kJ/mol)
+        D_e: float = 392.46,  # Morse well depth (kJ/mol) - from BDE
+        alpha: float = 13.275,  # Morse width parameter (nm^-1) - computed from sqrt(k_bond/(2*D_e))
+        r0: float = 0.109,  # Equilibrium bond distance (nm)
+        platform: str = "CUDA",
+        n_windows: int = 50,
+        reaction_coordinate: list[float] | None = None,
+        restraint_sel: str | None = None,
+    ):
         """Initialize the EVB orchestrator.
 
         Args:
@@ -797,7 +860,7 @@ class EVB:
         """
         self.topology = Path(topology)
         self.coordinates = Path(coordinates)
-        self.path = self.topology.parent / 'evb'
+        self.path = self.topology.parent / "evb"
 
         self.parsl_config = parsl_config
         self.dfk = None
@@ -814,18 +877,22 @@ class EVB:
         self.D_e = D_e
         self.alpha = alpha
         self.r0 = r0
-        
+
         self.platform = platform
         self.restraint_sel = restraint_sel
         self.n_windows = n_windows
-        
-        self.prepare_inputs(donor_atom, acceptor_atom, reactive_atom, reaction_coordinate)
 
-    def prepare_inputs(self,
-                       donor: str,
-                       acceptor: str,
-                       reactor: str,
-                       rc: Optional[list[float]]=None,) -> None:
+        self.prepare_inputs(
+            donor_atom, acceptor_atom, reactive_atom, reaction_coordinate
+        )
+
+    def prepare_inputs(
+        self,
+        donor: str,
+        acceptor: str,
+        reactor: str,
+        rc: list[float] | None = None,
+    ) -> None:
         """"""
         u = mda.Universe(self.topology, self.coordinates)
 
@@ -835,20 +902,19 @@ class EVB:
 
         self.morse_atoms = [a0.ix[0], a2.ix[0]]
         self.umbrella_atoms = [a0.ix[0], a1.ix[0], a2.ix[0]]
-        
+
         if rc is None:
-            p0 = a0.positions 
+            p0 = a0.positions
             p1 = a1.positions
             p2 = a2.positions
-            
-            rc_min = (np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)) * 0.1 # to nm
+
+            rc_min = (np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)) * 0.1  # to nm
             rc_interval = np.abs(rc_min * 2) / self.n_windows
             rc = [rc_min, rc_min * -1 + rc_interval, rc_interval]
 
         self.reaction_coordinate = self.construct_rc(rc)
 
-    def construct_rc(self,
-                     rc: list[float]) -> np.ndarray:
+    def construct_rc(self, rc: list[float]) -> np.ndarray:
         """Construct linearly spaced reaction coordinate.
 
         Args:
@@ -858,7 +924,6 @@ class EVB:
             (np.ndarray): Linearly spaced reaction coordinate
         """
         return np.arange(rc[0], rc[1] + rc[2], rc[2])
-
 
     def initialize(self) -> None:
         """Initialize Parsl for runs.
@@ -892,22 +957,21 @@ class EVB:
         self.dfk = None
         self._owns_parsl = False
 
-    def run_evb(self,
-                parsl_func: Callable=run_evb_window) -> None:
+    def run_evb(self, parsl_func: Callable = run_evb_window) -> None:
         """Collect futures for each EVB window and distribute."""
         if self._owns_parsl:
             self.initialize()
 
         futures = []
         for i, rc0 in enumerate(self.reaction_coordinate):
-            umbrella = {**self.umbrella, 'rc0': rc0}
-            
+            umbrella = {**self.umbrella, "rc0": rc0}
+
             futures.append(
                 parsl_func(
                     topology=self.topology,
                     coord_file=self.coordinates,
-                    out_path=self.path / f'window{i}',
-                    rc_file=self.log_path / f'{self.log_prefix}_{i}.log',
+                    out_path=self.path / f"window{i}",
+                    rc_file=self.log_path / f"{self.log_prefix}_{i}.log",
                     umbrella_force=umbrella,
                     morse_bond=self.morse_bond,
                     rc_freq=self.rc_freq,
@@ -923,15 +987,11 @@ class EVB:
                 future.result()
             except Exception as e:
                 tb = traceback.format_exc()
-                print(
-                    'EVB failed for 1 or more windows!'
-                    f'{e}'
-                    f'{tb}'
-                )
+                print(f"EVB failed for 1 or more windows!{e}{tb}")
 
         if self._owns_parsl:
             self.shutdown()
-    
+
     def process_evb_run(self) -> pl.DataFrame:
         """Reads in RCReporter logs from an EVB run and collects RC data.
 
@@ -946,31 +1006,39 @@ class EVB:
             ValueError: If no EVB windows are found.
             FileNotFoundError: If RC log files are missing.
         """
-        windows = natsorted(list(self.path.glob('window*')))
+        windows = natsorted(list(self.path.glob("window*")))
         if not windows:
             raise ValueError(f"No EVB windows found in {self.path}")
 
         all_data = []
 
-        for i, window in enumerate(windows):
-            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
+        for i in range(len(windows)):
+            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
             if not rc_log.exists():
                 raise FileNotFoundError(f"RC log file not found: {rc_log}")
 
-            rc_contents = pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy().flatten()
+            rc_contents = (
+                pl.read_csv(str(rc_log)).select(pl.col("rc")).to_numpy().flatten()
+            )
             n_frames = len(rc_contents)
 
-            window_df = pl.DataFrame({
-                'window': np.full(n_frames, i, dtype=np.int32),
-                'RC': rc_contents,
-                'rc0': np.full(n_frames, self.reaction_coordinate[i], dtype=np.float64),
-            })
+            window_df = pl.DataFrame(
+                {
+                    "window": np.full(n_frames, i, dtype=np.int32),
+                    "RC": rc_contents,
+                    "rc0": np.full(
+                        n_frames, self.reaction_coordinate[i], dtype=np.float64
+                    ),
+                }
+            )
             all_data.append(window_df)
 
-            logger.info(f"Loaded window {i}: {n_frames} frames, target RC = {self.reaction_coordinate[i]:.4f}")
+            logger.info(
+                f"Loaded window {i}: {n_frames} frames, target RC = {self.reaction_coordinate[i]:.4f}"
+            )
 
         df = pl.concat(all_data)
-        output_path = self.log_path / f'{self.log_prefix}_rc_data.parquet'
+        output_path = self.log_path / f"{self.log_prefix}_rc_data.parquet"
         df.write_parquet(str(output_path))
         logger.info(f"Saved RC data to {output_path}")
 
@@ -986,24 +1054,25 @@ class EVB:
             ValueError: If no windows found.
             FileNotFoundError: If log files missing.
         """
-        windows = natsorted(list(self.path.glob('window*')))
+        windows = natsorted(list(self.path.glob("window*")))
         if not windows:
             raise ValueError(f"No EVB windows found in {self.path}")
 
         rc_data = []
         for i in range(len(windows)):
-            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
+            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
             if not rc_log.exists():
                 raise FileNotFoundError(f"RC log file not found: {rc_log}")
-            rc_contents = pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy().flatten()
+            rc_contents = (
+                pl.read_csv(str(rc_log)).select(pl.col("rc")).to_numpy().flatten()
+            )
             rc_data.append(rc_contents)
 
         return rc_data
 
-    def detect_equilibration(self,
-                             rc_data: list[np.ndarray],
-                             method: str = 'statistical_inefficiency'
-                             ) -> list[EquilibrationResult]:
+    def detect_equilibration(
+        self, rc_data: list[np.ndarray], method: str = "statistical_inefficiency"
+    ) -> list[EquilibrationResult]:
         """Detect equilibration time for each window.
 
         Uses statistical inefficiency to identify when each trajectory has
@@ -1021,25 +1090,29 @@ class EVB:
         for i, rc in enumerate(rc_data):
             if len(rc) < 10:
                 # Too few samples for equilibration detection
-                results.append(EquilibrationResult(
-                    window_idx=i,
-                    t0=0,
-                    g=1.0,
-                    n_effective=float(len(rc)),
-                    fraction_discarded=0.0
-                ))
+                results.append(
+                    EquilibrationResult(
+                        window_idx=i,
+                        t0=0,
+                        g=1.0,
+                        n_effective=float(len(rc)),
+                        fraction_discarded=0.0,
+                    )
+                )
                 continue
 
             # Use autocorrelation-based detection
             t0, g, n_eff = self._detect_equilibration_autocorr(rc)
 
-            results.append(EquilibrationResult(
-                window_idx=i,
-                t0=t0,
-                g=g,
-                n_effective=n_eff,
-                fraction_discarded=t0 / len(rc)
-            ))
+            results.append(
+                EquilibrationResult(
+                    window_idx=i,
+                    t0=t0,
+                    g=g,
+                    n_effective=n_eff,
+                    fraction_discarded=t0 / len(rc),
+                )
+            )
 
             if t0 > len(rc) * 0.5:
                 logger.warning(
@@ -1050,9 +1123,9 @@ class EVB:
         return results
 
     @staticmethod
-    def _detect_equilibration_autocorr(data: np.ndarray,
-                                       max_lag: Optional[int] = None
-                                       ) -> tuple[int, float, float]:
+    def _detect_equilibration_autocorr(
+        data: np.ndarray, max_lag: int | None = None
+    ) -> tuple[int, float, float]:
         """Detect equilibration using autocorrelation analysis.
 
         Implements a simplified version of Chodera's method for detecting
@@ -1080,8 +1153,8 @@ class EVB:
             return 0, 1.0, float(n)
 
         # Compute autocorrelation
-        autocorr = np.correlate(data_normalized, data_normalized, mode='full')
-        autocorr = autocorr[n - 1:] / (variance * n)
+        autocorr = np.correlate(data_normalized, data_normalized, mode="full")
+        autocorr = autocorr[n - 1 :] / (variance * n)
 
         # Compute statistical inefficiency g = 1 + 2 * sum(C(t))
         # where C(t) is the normalized autocorrelation
@@ -1108,8 +1181,10 @@ class EVB:
             if var_subset < 1e-10:
                 continue
 
-            autocorr_subset = np.correlate(subset_norm, subset_norm, mode='full')
-            autocorr_subset = autocorr_subset[len(subset) - 1:] / (var_subset * len(subset))
+            autocorr_subset = np.correlate(subset_norm, subset_norm, mode="full")
+            autocorr_subset = autocorr_subset[len(subset) - 1 :] / (
+                var_subset * len(subset)
+            )
 
             g_subset = 1.0
             for t in range(1, min(max_lag, len(subset))):
@@ -1127,11 +1202,12 @@ class EVB:
 
         return best_t0, g, best_n_eff
 
-    def check_convergence(self,
-                          rc_data: list[np.ndarray],
-                          block_size: Optional[int] = None,
-                          sem_threshold: float = 0.01
-                          ) -> list[ConvergenceResult]:
+    def check_convergence(
+        self,
+        rc_data: list[np.ndarray],
+        block_size: int | None = None,
+        sem_threshold: float = 0.01,
+    ) -> list[ConvergenceResult]:
         """Check convergence of each window using block averaging.
 
         Block averaging divides the trajectory into blocks and computes
@@ -1162,23 +1238,24 @@ class EVB:
                 bs = n // n_blocks
 
             # Compute block means
-            block_means = np.array([
-                rc[j * bs:(j + 1) * bs].mean()
-                for j in range(n_blocks)
-            ])
+            block_means = np.array(
+                [rc[j * bs : (j + 1) * bs].mean() for j in range(n_blocks)]
+            )
 
             mean_rc = np.mean(block_means)
             sem = np.std(block_means, ddof=1) / np.sqrt(n_blocks)
             is_converged = sem < sem_threshold
 
-            results.append(ConvergenceResult(
-                window_idx=i,
-                mean_rc=mean_rc,
-                sem=sem,
-                n_blocks=n_blocks,
-                block_means=block_means,
-                is_converged=is_converged
-            ))
+            results.append(
+                ConvergenceResult(
+                    window_idx=i,
+                    mean_rc=mean_rc,
+                    sem=sem,
+                    n_blocks=n_blocks,
+                    block_means=block_means,
+                    is_converged=is_converged,
+                )
+            )
 
             if not is_converged:
                 logger.warning(
@@ -1188,11 +1265,12 @@ class EVB:
 
         return results
 
-    def analyze_overlap(self,
-                        rc_data: list[np.ndarray],
-                        n_bins: int = 50,
-                        min_overlap_threshold: float = 0.03
-                        ) -> OverlapResult:
+    def analyze_overlap(
+        self,
+        rc_data: list[np.ndarray],
+        n_bins: int = 50,
+        min_overlap_threshold: float = 0.03,
+    ) -> OverlapResult:
         """Analyze overlap between adjacent umbrella windows.
 
         Good overlap between windows is critical for accurate free energy
@@ -1239,14 +1317,12 @@ class EVB:
         return OverlapResult(
             overlap_matrix=overlap_matrix,
             min_overlap=min_overlap,
-            problem_pairs=problem_pairs
+            problem_pairs=problem_pairs,
         )
 
-    def compute_pmf(self,
-                    rc_data: list[np.ndarray],
-                    temperature: float = 300.0,
-                    n_bins: int = 50
-                    ) -> PMFResult:
+    def compute_pmf(
+        self, rc_data: list[np.ndarray], temperature: float = 300.0, n_bins: int = 50
+    ) -> PMFResult:
         """Compute the Potential of Mean Force using MBAR.
 
         Uses the pymbar library to compute free energies from umbrella
@@ -1270,22 +1346,22 @@ class EVB:
         n_windows = len(rc_data)
         rc0_values = self.reaction_coordinate[:n_windows]
 
-        try:
-            import pymbar
+        if find_spec('pymbar') is not None:
             return self._compute_pmf_mbar(rc_data, rc0_values, temperature, n_bins)
-        except ImportError:
+        else:
             logger.warning(
                 "pymbar not available. Using simplified histogram reweighting. "
                 "Install pymbar for more accurate results: pip install pymbar"
             )
             return self._compute_pmf_histogram(rc_data, rc0_values, temperature, n_bins)
 
-    def _compute_pmf_mbar(self,
-                          rc_data: list[np.ndarray],
-                          rc0_values: np.ndarray,
-                          temperature: float,
-                          n_bins: int
-                          ) -> PMFResult:
+    def _compute_pmf_mbar(
+        self,
+        rc_data: list[np.ndarray],
+        rc0_values: np.ndarray,
+        temperature: float,
+        n_bins: int,
+    ) -> PMFResult:
         """Compute PMF using MBAR (Multistate Bennett Acceptance Ratio).
 
         MBAR is the statistically optimal method for combining data from
@@ -1321,8 +1397,8 @@ class EVB:
 
         # Get free energies for each window
         results = mbar.compute_free_energy_differences()
-        free_energies = results['Delta_f'][0, :]  # Relative to first window
-        free_energy_uncertainty = results['dDelta_f'][0, :]
+        free_energies = results["Delta_f"][0, :]  # Relative to first window
+        free_energy_uncertainty = results["dDelta_f"][0, :]
 
         # Compute PMF on a grid using histogram reweighting
         rc_min, rc_max = rc_all.min(), rc_all.max()
@@ -1336,7 +1412,7 @@ class EVB:
 
         # Use MBAR to compute expectations for histogram bin populations
         # Then convert to free energy
-        for i, rc_target in enumerate(bin_centers):
+        for i, _rc_target in enumerate(bin_centers):
             # Create a flat potential (unbiased) target state
             # and compute the probability of being in each bin
             bin_mask = (rc_all >= bin_edges[i]) & (rc_all < bin_edges[i + 1])
@@ -1349,7 +1425,6 @@ class EVB:
             # Use MBAR weights to compute unbiased histogram
             try:
                 # Get weights for unbiased state
-                u_unbiased = np.zeros(N_total)  # Unbiased potential
                 weights = mbar.compute_weights()[0]  # Weights for first state
 
                 # Probability in this bin under unbiased distribution
@@ -1380,15 +1455,16 @@ class EVB:
             pmf=pmf,
             pmf_uncertainty=pmf_uncertainty,
             free_energies=free_energies,
-            free_energy_uncertainty=free_energy_uncertainty
+            free_energy_uncertainty=free_energy_uncertainty,
         )
 
-    def _compute_pmf_histogram(self,
-                               rc_data: list[np.ndarray],
-                               rc0_values: np.ndarray,
-                               temperature: float,
-                               n_bins: int
-                               ) -> PMFResult:
+    def _compute_pmf_histogram(
+        self,
+        rc_data: list[np.ndarray],
+        rc0_values: np.ndarray,
+        temperature: float,
+        n_bins: int,
+    ) -> PMFResult:
         """Compute PMF using WHAM-like histogram reweighting.
 
         This is a simplified implementation when pymbar is not available.
@@ -1474,17 +1550,18 @@ class EVB:
             pmf=pmf,
             pmf_uncertainty=pmf_uncertainty,
             free_energies=f_k * KB * temperature,
-            free_energy_uncertainty=np.full(n_windows, 0.5)
+            free_energy_uncertainty=np.full(n_windows, 0.5),
         )
 
-    def run_full_analysis(self,
-                          temperature: float = 300.0,
-                          n_bins: int = 50,
-                          block_size: Optional[int] = None,
-                          sem_threshold: float = 0.01,
-                          overlap_threshold: float = 0.03,
-                          discard_equilibration: bool = True
-                          ) -> EVBAnalysisResult:
+    def run_full_analysis(
+        self,
+        temperature: float = 300.0,
+        n_bins: int = 50,
+        block_size: int | None = None,
+        sem_threshold: float = 0.01,
+        overlap_threshold: float = 0.03,
+        discard_equilibration: bool = True,
+    ) -> EVBAnalysisResult:
         """Run comprehensive free energy analysis on EVB data.
 
         This method performs:
@@ -1522,9 +1599,7 @@ class EVB:
 
         # Remove equilibration frames if requested
         if discard_equilibration:
-            rc_data = [
-                rc[eq.t0:] for rc, eq in zip(rc_data_raw, equilibration)
-            ]
+            rc_data = [rc[eq.t0 :] for rc, eq in zip(rc_data_raw, equilibration, strict=True)]
             n_discarded = sum(eq.t0 for eq in equilibration)
             n_total = sum(len(rc) for rc in rc_data_raw)
             logger.info(
@@ -1556,7 +1631,9 @@ class EVB:
         valid_pmf = pmf.pmf[~np.isnan(pmf.pmf)]
         if len(valid_pmf) > 0:
             barrier = valid_pmf.max()
-            logger.info(f"Estimated barrier height: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)")
+            logger.info(
+                f"Estimated barrier height: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)"
+            )
 
         return EVBAnalysisResult(
             pmf=pmf,
@@ -1565,13 +1642,12 @@ class EVB:
             equilibration=equilibration,
             rc_data=rc_data,
             temperature=temperature,
-            k_umbrella=self.k
+            k_umbrella=self.k,
         )
 
-    def save_analysis_results(self,
-                              result: EVBAnalysisResult,
-                              output_dir: Optional[Path] = None
-                              ) -> None:
+    def save_analysis_results(
+        self, result: EVBAnalysisResult, output_dir: Path | None = None
+    ) -> None:
         """Save analysis results to files.
 
         Saves:
@@ -1588,34 +1664,40 @@ class EVB:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Save PMF
-        pmf_df = pl.DataFrame({
-            'RC': result.pmf.bin_centers,
-            'PMF_kJ_mol': result.pmf.pmf,
-            'uncertainty_kJ_mol': result.pmf.pmf_uncertainty
-        })
-        pmf_df.write_csv(str(output_dir / f'{self.log_prefix}_pmf.csv'))
+        pmf_df = pl.DataFrame(
+            {
+                "RC": result.pmf.bin_centers,
+                "PMF_kJ_mol": result.pmf.pmf,
+                "uncertainty_kJ_mol": result.pmf.pmf_uncertainty,
+            }
+        )
+        pmf_df.write_csv(str(output_dir / f"{self.log_prefix}_pmf.csv"))
 
         # Save window free energies
-        fe_df = pl.DataFrame({
-            'window': list(range(len(result.pmf.free_energies))),
-            'rc0': self.reaction_coordinate[:len(result.pmf.free_energies)],
-            'free_energy_kJ_mol': result.pmf.free_energies,
-            'uncertainty_kJ_mol': result.pmf.free_energy_uncertainty
-        })
-        fe_df.write_csv(str(output_dir / f'{self.log_prefix}_window_free_energies.csv'))
+        fe_df = pl.DataFrame(
+            {
+                "window": list(range(len(result.pmf.free_energies))),
+                "rc0": self.reaction_coordinate[: len(result.pmf.free_energies)],
+                "free_energy_kJ_mol": result.pmf.free_energies,
+                "uncertainty_kJ_mol": result.pmf.free_energy_uncertainty,
+            }
+        )
+        fe_df.write_csv(str(output_dir / f"{self.log_prefix}_window_free_energies.csv"))
 
         # Save convergence data
-        conv_df = pl.DataFrame({
-            'window': [c.window_idx for c in result.convergence],
-            'mean_rc': [c.mean_rc for c in result.convergence],
-            'sem': [c.sem for c in result.convergence],
-            'is_converged': [c.is_converged for c in result.convergence]
-        })
-        conv_df.write_csv(str(output_dir / f'{self.log_prefix}_convergence.csv'))
+        conv_df = pl.DataFrame(
+            {
+                "window": [c.window_idx for c in result.convergence],
+                "mean_rc": [c.mean_rc for c in result.convergence],
+                "sem": [c.sem for c in result.convergence],
+                "is_converged": [c.is_converged for c in result.convergence],
+            }
+        )
+        conv_df.write_csv(str(output_dir / f"{self.log_prefix}_convergence.csv"))
 
         # Save summary
-        summary_path = output_dir / f'{self.log_prefix}_analysis_summary.txt'
-        with open(summary_path, 'w') as f:
+        summary_path = output_dir / f"{self.log_prefix}_analysis_summary.txt"
+        with open(summary_path, "w") as f:
             f.write("EVB Free Energy Analysis Summary\n")
             f.write("=" * 50 + "\n\n")
 
@@ -1628,18 +1710,22 @@ class EVB:
                 f.write(f"Barrier height: {valid_pmf.max():.2f} kJ/mol\n")
                 f.write(f"              = {valid_pmf.max() / 4.184:.2f} kcal/mol\n\n")
 
-            f.write(f"Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} windows converged\n")
+            f.write(
+                f"Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} windows converged\n"
+            )
             f.write(f"Minimum overlap: {result.overlap.min_overlap:.3f}\n")
             if result.overlap.problem_pairs:
                 f.write(f"Problem pairs: {result.overlap.problem_pairs}\n")
 
-            f.write(f"\nEquilibration:\n")
+            f.write("\nEquilibration:\n")
             for eq in result.equilibration:
-                f.write(f"  Window {eq.window_idx}: t0={eq.t0}, g={eq.g:.2f}, N_eff={eq.n_effective:.1f}\n")
+                f.write(
+                    f"  Window {eq.window_idx}: t0={eq.t0}, g={eq.g:.2f}, N_eff={eq.n_effective:.1f}\n"
+                )
 
         logger.info(f"Analysis results saved to {output_dir}")
 
-    def save_metadata(self, output_path: Optional[Path] = None) -> Path:
+    def save_metadata(self, output_path: Path | None = None) -> Path:
         """Save run metadata for later analysis without re-instantiation.
 
         This is crucial for HPC workflows where simulations may be interrupted
@@ -1655,25 +1741,27 @@ class EVB:
         Example:
             >>> evb = EVB(...)
             >>> evb.save_metadata()  # Save before running
-            >>> evb.run_evb()        # May get interrupted by walltime
+            >>> evb.run_evb()  # May get interrupted by walltime
             >>>
             >>> # Later, in a new job:
-            >>> analyzer = EVBAnalyzer.from_metadata('path/to/evb_metadata.toml')
+            >>> analyzer = EVBAnalyzer.from_metadata("path/to/evb_metadata.toml")
             >>> result = analyzer.run_full_analysis()
         """
-        output_path = Path(output_path) if output_path else (self.log_path / 'evb_metadata.toml')
+        output_path = (
+            Path(output_path) if output_path else (self.log_path / "evb_metadata.toml")
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write("# EVB run metadata - use with EVBAnalyzer.from_metadata()\n")
-            f.write(f"# Generated from EVB instance\n\n")
+            f.write("# Generated from EVB instance\n\n")
             f.write("[evb]\n")
             f.write(f'log_path = "{self.log_path}"\n')
             f.write(f'log_prefix = "{self.log_prefix}"\n')
             f.write(f"k_umbrella = {self.k}\n")
             f.write(f"rc0_values = {self.reaction_coordinate.tolist()}\n")
-            f.write(f"\n# Additional simulation parameters (for reference)\n")
-            f.write(f"[simulation]\n")
+            f.write("\n# Additional simulation parameters (for reference)\n")
+            f.write("[simulation]\n")
             f.write(f"n_windows = {self.n_windows}\n")
             f.write(f"steps = {self.steps}\n")
             f.write(f"dt = {self.dt}\n")
@@ -1688,7 +1776,7 @@ class EVB:
         logger.info(f"Saved EVB metadata to {output_path}")
         return output_path
 
-    def get_analyzer(self) -> 'EVBAnalyzer':
+    def get_analyzer(self) -> "EVBAnalyzer":
         """Create an EVBAnalyzer from this EVB instance.
 
         Useful when you want to run analysis separately from simulation,
@@ -1717,12 +1805,12 @@ class EVB:
             dict: Umbrella and path restraint parameters.
         """
         return {
-            'atom_i': self.umbrella_atoms[0],
-            'atom_j': self.umbrella_atoms[1],
-            'atom_k': self.umbrella_atoms[2],
-            'k': self.k,
-            'k_path': self.k_path,
-            'rc0': None
+            "atom_i": self.umbrella_atoms[0],
+            "atom_j": self.umbrella_atoms[1],
+            "atom_k": self.umbrella_atoms[2],
+            "k": self.k,
+            "k_path": self.k_path,
+            "rc0": None,
         }
 
     @property
@@ -1751,28 +1839,31 @@ class EVB:
             dict: Morse bond parameters with keys atom_i, atom_j, D_e, alpha, r0.
         """
         return {
-            'atom_i': self.morse_atoms[0],
-            'atom_j': self.morse_atoms[1],
-            'D_e': self.D_e,
-            'alpha': self.alpha,
-            'r0': self.r0,
+            "atom_i": self.morse_atoms[0],
+            "atom_j": self.morse_atoms[1],
+            "D_e": self.D_e,
+            "alpha": self.alpha,
+            "r0": self.r0,
         }
-    
+
+
 class EVBCalculation:
     """Runs a single EVB window."""
 
-    def __init__(self,
-                 topology: Path,
-                 coord_file: Path,
-                 out_path: Path,
-                 rc_file: Path,
-                 umbrella: dict,
-                 morse_bond: dict,
-                 rc_freq: int=5, # 0.01 ps @ 2 fs timestep
-                 steps: int=500_000, # 1 ns @ 2 fs timestep
-                 dt: float=0.002,
-                 platform: str='CUDA',
-                 restraint_sel: Optional[str]=None):
+    def __init__(
+        self,
+        topology: Path,
+        coord_file: Path,
+        out_path: Path,
+        rc_file: Path,
+        umbrella: dict,
+        morse_bond: dict,
+        rc_freq: int = 5,  # 0.01 ps @ 2 fs timestep
+        steps: int = 500_000,  # 1 ns @ 2 fs timestep
+        dt: float = 0.002,
+        platform: str = "CUDA",
+        restraint_sel: str | None = None,
+    ):
         """Initialize a single EVB window calculation.
 
         Args:
@@ -1792,18 +1883,18 @@ class EVBCalculation:
                 restraints. Defaults to None.
         """
         self.sim_engine = Simulator(
-            path = topology.parent,
-            top_name = topology.name,
-            coor_name = coord_file.name,
-            out_path = out_path,
+            path=topology.parent,
+            top_name=topology.name,
+            coor_name=coord_file.name,
+            out_path=out_path,
             prod_steps=steps,
             platform=platform,
         )
 
         # Only set Precision for platforms that support it (CUDA, OpenCL)
-        if platform.upper() in ('CUDA', 'OPENCL'):
+        if platform.upper() in ("CUDA", "OPENCL"):
             self.sim_engine.properties = {
-                'Precision': 'mixed',
+                "Precision": "mixed",
             }
         else:
             self.sim_engine.properties = {}
@@ -1815,7 +1906,7 @@ class EVBCalculation:
         self.restraint_sel = restraint_sel
         self.umbrella = umbrella
         self.morse_bond = morse_bond
-        
+
     def prepare(self):
         """Generates simulation object containing all custom forces to compute
         free energy. Leverages standard Simulator as backend, adding in Morse
@@ -1827,9 +1918,7 @@ class EVBCalculation:
         # Remove the original harmonic bond before adding Morse potential
         # to avoid double-counting the bonded interaction
         self.remove_harmonic_bond(
-            system,
-            self.morse_bond['atom_i'],
-            self.morse_bond['atom_j']
+            system, self.morse_bond["atom_i"], self.morse_bond["atom_j"]
         )
 
         # add various custom forces to system
@@ -1853,38 +1942,36 @@ class EVBCalculation:
         # finally, build simulation object
         simulation, integrator = self.sim_engine.setup_sim(system, dt=self.dt)
         simulation.context.setPositions(self.sim_engine.coordinate.positions)
-        
+
         return simulation, integrator
 
     def run(self):
         """Runs EVB simulation window with custom RCReporter."""
-        simulation, integrator = self.prepare()
+        simulation, _integrator = self.prepare()
         simulation.minimizeEnergy()
-        simulation = self.sim_engine.attach_reporters(simulation,
-                                                      self.sim_engine.dcd,
-                                                      str(self.sim_engine.prod_log),
-                                                      str(self.sim_engine.restart),
-                                                      restart=False)
+        simulation = self.sim_engine.attach_reporters(
+            simulation,
+            self.sim_engine.dcd,
+            str(self.sim_engine.prod_log),
+            str(self.sim_engine.restart),
+            restart=False,
+        )
         atom_indices = [
-            self.umbrella['atom_i'],
-            self.umbrella['atom_j'],
-            self.umbrella['atom_k'],
+            self.umbrella["atom_i"],
+            self.umbrella["atom_j"],
+            self.umbrella["atom_k"],
         ]
-        
+
         simulation.reporters.append(
-            RCReporter(self.rc_file, self.rc_freq, atom_indices, self.umbrella['rc0'])
+            RCReporter(self.rc_file, self.rc_freq, atom_indices, self.umbrella["rc0"])
         )
 
         simulation.step(self.steps)
 
-    
     @staticmethod
-    def umbrella_force(atom_i: int,
-                       atom_j: int,
-                       atom_k: int,
-                       k: float,
-                       rc0: float,
-                       **kwargs) -> CustomCompoundBondForce:
+    def umbrella_force(
+        atom_i: int, atom_j: int, atom_k: int, k: float, rc0: float, **kwargs
+    ) -> CustomCompoundBondForce:
         """Difference of distances umbrella force. Think pulling an oxygen off
 
         Args:
@@ -1897,19 +1984,20 @@ class EVBCalculation:
         Returns:
             CustomBondForce: Force that drives sampling in each umbrella window.
         """
-        force = CustomCompoundBondForce(3, '0.5 * k_umb * ((r13 - r23) - rc0) ^ 2; r13=distance(p1, p3); r23=distance(p2, p3);')
-        force.addGlobalParameter('k_umb', k)
-        force.addGlobalParameter('rc0', rc0)
+        force = CustomCompoundBondForce(
+            3,
+            "0.5 * k_umb * ((r13 - r23) - rc0) ^ 2; r13=distance(p1, p3); r23=distance(p2, p3);",
+        )
+        force.addGlobalParameter("k_umb", k)
+        force.addGlobalParameter("rc0", rc0)
         force.addBond([atom_i, atom_j, atom_k])
-    
+
         return force
 
     @staticmethod
-    def path_restraint(atom_i: int,
-                       atom_j: int,
-                       atom_k: int,
-                       k_path: float,
-                       **kwargs) -> CustomCompoundBondForce:
+    def path_restraint(
+        atom_i: int, atom_j: int, atom_k: int, k_path: float, **kwargs
+    ) -> CustomCompoundBondForce:
         """Enforce collinearity of moving atom with respect to the initial
         and final positions. By avoiding a custom angle force we avoid instability
         related to the asymptote at 180 degrees, which is what we are attempting to
@@ -1929,31 +2017,31 @@ class EVBCalculation:
         Returns:
             CustomCompoundBondForce: Force enforcing D-H-A collinearity.
         """
-        force = CustomCompoundBondForce(3,  (
-                'k_path * (1 - costheta)^2; '
-                'costheta = dot_ij_ik / (r_ij * r_ik); '
-                'dot_ij_ik = dx_ij*dx_ik + dy_ij*dy_ik + dz_ij*dz_ik; '
-                'r_ij = sqrt(dx_ij^2 + dy_ij^2 + dz_ij^2); '
-                'r_ik = sqrt(dx_ik^2 + dy_ik^2 + dz_ik^2); '
-                'dx_ij = x2 - x1; '
-                'dy_ij = y2 - y1; '
-                'dz_ij = z2 - z1; '
-                'dx_ik = x3 - x1; '
-                'dy_ik = y3 - y1; '
-                'dz_ik = z3 - z1'
-            )
+        force = CustomCompoundBondForce(
+            3,
+            (
+                "k_path * (1 - costheta)^2; "
+                "costheta = dot_ij_ik / (r_ij * r_ik); "
+                "dot_ij_ik = dx_ij*dx_ik + dy_ij*dy_ik + dz_ij*dz_ik; "
+                "r_ij = sqrt(dx_ij^2 + dy_ij^2 + dz_ij^2); "
+                "r_ik = sqrt(dx_ik^2 + dy_ik^2 + dz_ik^2); "
+                "dx_ij = x2 - x1; "
+                "dy_ij = y2 - y1; "
+                "dz_ij = z2 - z1; "
+                "dx_ik = x3 - x1; "
+                "dy_ik = y3 - y1; "
+                "dz_ik = z3 - z1"
+            ),
         )
-        force.addGlobalParameter('k_path', k_path)
+        force.addGlobalParameter("k_path", k_path)
         force.addBond([atom_i, atom_k, atom_j])
 
         return force
-    
+
     @staticmethod
-    def morse_bond_force(atom_i: int,
-                         atom_j: int,
-                         D_e: float,
-                         alpha: float,
-                         r0: float) -> CustomBondForce:
+    def morse_bond_force(
+        atom_i: int, atom_j: int, D_e: float, alpha: float, r0: float
+    ) -> CustomBondForce:
         """Generates a custom Morse potential between two atom indices.
 
         The Morse potential has the form:
@@ -1978,10 +2066,10 @@ class EVBCalculation:
         Returns:
             CustomBondForce: Force corresponding to a Morse potential.
         """
-        force = CustomBondForce('D_e * (1 - exp(-alpha * (r-r0))) ^ 2')
-        force.addGlobalParameter('D_e', D_e)
-        force.addGlobalParameter('alpha', alpha)
-        force.addGlobalParameter('r0', r0)
+        force = CustomBondForce("D_e * (1 - exp(-alpha * (r-r0))) ^ 2")
+        force.addGlobalParameter("D_e", D_e)
+        force.addGlobalParameter("alpha", alpha)
+        force.addGlobalParameter("r0", r0)
         force.addBond(atom_i, atom_j)
 
         return force
@@ -2012,11 +2100,13 @@ class EVBCalculation:
             force = system.getForce(force_idx)
             if isinstance(force, HarmonicBondForce):
                 for bond_idx in range(force.getNumBonds()):
-                    p1, p2, length, k = force.getBondParameters(bond_idx)
+                    p1, p2, length, _k = force.getBondParameters(bond_idx)
                     if {p1, p2} == target_pair:
                         # Zero out the force constant, keeping equilibrium length
                         force.setBondParameters(bond_idx, p1, p2, length, 0.0)
-                        print(f"Zeroed harmonic bond between atoms {atom_i} and {atom_j}")
+                        print(
+                            f"Zeroed harmonic bond between atoms {atom_i} and {atom_j}"
+                        )
                         found_bond = True
                         break
                 break
@@ -2025,7 +2115,7 @@ class EVBCalculation:
         # Need to iterate in reverse since we're removing
         constraints_to_remove = []
         for i in range(system.getNumConstraints()):
-            p1, p2, distance = system.getConstraintParameters(i)
+            p1, p2, _distance = system.getConstraintParameters(i)
             if {p1, p2} == target_pair:
                 constraints_to_remove.append(i)
 
@@ -2036,5 +2126,6 @@ class EVBCalculation:
             found_constraint = True
 
         if not found_bond and not found_constraint:
-            print(f"Warning: No harmonic bond or constraint found between atoms {atom_i} and {atom_j}")
-
+            print(
+                f"Warning: No harmonic bond or constraint found between atoms {atom_i} and {atom_j}"
+            )

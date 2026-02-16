@@ -1,20 +1,22 @@
 """
 Unit tests for build/build_interface.py module
 """
-import pytest
-import numpy as np
+
+import os
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
-import os
+from unittest.mock import MagicMock, Mock, patch
+
+import numpy as np
+import pytest
 import yaml
 
 
 class TestInterfaceBuilderInit:
     """Test suite for InterfaceBuilder class initialization"""
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_interface_builder_init(self, mock_mda):
         """Test InterfaceBuilder initialization"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -30,21 +32,27 @@ class TestInterfaceBuilderInit:
             path = Path(tmpdir)
 
             # Create input files
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
             interfaces = {
-                'site0': {
-                    'contact_sel': 'name CA and resid 10-50',
-                    'distance_sel': 'resid 10-50',
-                    'vector': [10.0, 0.0, 0.0],
-                    'com': [50.0, 50.0, 50.0]
+                "site0": {
+                    "contact_sel": "name CA and resid 10-50",
+                    "distance_sel": "resid 10-50",
+                    "vector": [10.0, 0.0, 0.0],
+                    "com": [50.0, 50.0, 50.0],
                 }
             }
 
@@ -53,14 +61,14 @@ class TestInterfaceBuilderInit:
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
 
             assert builder.interfaces == interfaces
             assert builder.binder == binder_file
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_interface_builder_with_forcefields(self, mock_mda):
         """Test InterfaceBuilder with different forcefields"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -74,16 +82,29 @@ class TestInterfaceBuilderInit:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
-            interfaces = {'site0': {'contact_sel': '', 'distance_sel': '', 'vector': [0, 0, 0], 'com': [0, 0, 0]}}
+            interfaces = {
+                "site0": {
+                    "contact_sel": "",
+                    "distance_sel": "",
+                    "vector": [0, 0, 0],
+                    "com": [0, 0, 0],
+                }
+            }
 
             builder = InterfaceBuilder(
                 path=str(path),
@@ -92,18 +113,18 @@ class TestInterfaceBuilderInit:
                 target=target_file,
                 binder=binder_file,
                 protein=True,
-                rna=True
+                rna=True,
             )
 
-            assert 'leaprc.protein.ff19SB' in builder.ffs
-            assert 'leaprc.RNA.Shaw' in builder.ffs
+            assert "leaprc.protein.ff19SB" in builder.ffs
+            assert "leaprc.RNA.Shaw" in builder.ffs
 
 
 class TestInterfaceBuilderPlaceBinder:
     """Test suite for place_binder method"""
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_place_binder(self, mock_mda):
         """Test place_binder method"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -127,23 +148,36 @@ class TestInterfaceBuilderPlaceBinder:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
-            interfaces = {'site0': {'contact_sel': '', 'distance_sel': '', 'vector': [0, 0, 0], 'com': [0, 0, 0]}}
+            interfaces = {
+                "site0": {
+                    "contact_sel": "",
+                    "distance_sel": "",
+                    "vector": [0, 0, 0],
+                    "com": [0, 0, 0],
+                }
+            }
 
             builder = InterfaceBuilder(
                 path=str(path),
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
 
             vector = np.array([10.0, 0.0, 0.0], dtype=np.float32)
@@ -158,8 +192,8 @@ class TestInterfaceBuilderPlaceBinder:
 class TestInterfaceBuilderMergeProteins:
     """Test suite for merge_proteins method"""
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_merge_proteins(self, mock_mda):
         """Test merge_proteins method"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -180,26 +214,39 @@ class TestInterfaceBuilderMergeProteins:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
-            interfaces = {'site0': {'contact_sel': '', 'distance_sel': '', 'vector': [0, 0, 0], 'com': [0, 0, 0]}}
+            interfaces = {
+                "site0": {
+                    "contact_sel": "",
+                    "distance_sel": "",
+                    "vector": [0, 0, 0],
+                    "com": [0, 0, 0],
+                }
+            }
 
             builder = InterfaceBuilder(
                 path=str(path),
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
             builder.target = mock_target_atoms
-            builder.pdb = path / 'merged.pdb'
+            builder.pdb = path / "merged.pdb"
 
             mock_binder = MagicMock()
             builder.merge_proteins(mock_binder)
@@ -211,8 +258,8 @@ class TestInterfaceBuilderMergeProteins:
 class TestInterfaceBuilderParseInterface:
     """Test suite for parse_interface method"""
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_parse_interface(self, mock_mda):
         """Test parse_interface method"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -226,21 +273,27 @@ class TestInterfaceBuilderParseInterface:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
             interfaces = {
-                'site0': {
-                    'contact_sel': 'name CA and resid 10 11 12 13 14',  # 5 residues
-                    'distance_sel': 'resid 10-14',
-                    'vector': [10.0, 0.0, 0.0],
-                    'com': [50.0, 50.0, 50.0]
+                "site0": {
+                    "contact_sel": "name CA and resid 10 11 12 13 14",  # 5 residues
+                    "distance_sel": "resid 10-14",
+                    "vector": [10.0, 0.0, 0.0],
+                    "com": [50.0, 50.0, 50.0],
                 }
             }
 
@@ -249,12 +302,14 @@ class TestInterfaceBuilderParseInterface:
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
 
-            result = builder.parse_interface('site0')
+            result = builder.parse_interface("site0")
 
-            assert len(result) == 5  # contact_sel, distance_sel, vector, com, input_shape
+            assert (
+                len(result) == 5
+            )  # contact_sel, distance_sel, vector, com, input_shape
             assert result[2] == [10.0, 0.0, 0.0]  # vector
             assert result[3] == [50.0, 50.0, 50.0]  # com
 
@@ -262,8 +317,8 @@ class TestInterfaceBuilderParseInterface:
 class TestInterfaceBuilderWriteYaml:
     """Test suite for YAML writing methods"""
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_write_ddmd_yaml(self, mock_mda):
         """Test write_ddmd_yaml method"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -277,42 +332,55 @@ class TestInterfaceBuilderWriteYaml:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
-            interfaces = {'site0': {'contact_sel': '', 'distance_sel': '', 'vector': [0, 0, 0], 'com': [0, 0, 0]}}
+            interfaces = {
+                "site0": {
+                    "contact_sel": "",
+                    "distance_sel": "",
+                    "vector": [0, 0, 0],
+                    "com": [0, 0, 0],
+                }
+            }
 
             builder = InterfaceBuilder(
                 path=str(path),
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
             builder.yaml_out = path
-            builder.out = path / 'ddmd'
+            builder.out = path / "ddmd"
 
-            builder.write_ddmd_yaml('name CA', 'resid 1-10')
+            builder.write_ddmd_yaml("name CA", "resid 1-10")
 
-            yaml_file = path / 'prod.yaml'
+            yaml_file = path / "prod.yaml"
             assert yaml_file.exists()
 
             with open(yaml_file) as f:
                 content = yaml.safe_load(f)
 
-            assert 'simulation_input_dir' in content
-            assert 'num_workers' in content
-            assert content['simulation_settings']['mda_selection'] == 'name CA'
-            assert content['simulation_settings']['distance_sels'] == 'resid 1-10'
+            assert "simulation_input_dir" in content
+            assert "num_workers" in content
+            assert content["simulation_settings"]["mda_selection"] == "name CA"
+            assert content["simulation_settings"]["distance_sels"] == "resid 1-10"
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_write_cvae_yaml(self, mock_mda):
         """Test write_cvae_yaml method"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -326,47 +394,60 @@ class TestInterfaceBuilderWriteYaml:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
-            interfaces = {'site0': {'contact_sel': '', 'distance_sel': '', 'vector': [0, 0, 0], 'com': [0, 0, 0]}}
+            interfaces = {
+                "site0": {
+                    "contact_sel": "",
+                    "distance_sel": "",
+                    "vector": [0, 0, 0],
+                    "com": [0, 0, 0],
+                }
+            }
 
             builder = InterfaceBuilder(
                 path=str(path),
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
             builder.yaml_out = path
 
             input_shape = (1, 10, 10)
             builder.write_cvae_yaml(input_shape)
 
-            yaml_file = path / 'cvae-prod-settings.yaml'
+            yaml_file = path / "cvae-prod-settings.yaml"
             assert yaml_file.exists()
 
             with open(yaml_file) as f:
                 content = yaml.load(f, Loader=yaml.FullLoader)
 
-            assert list(content['input_shape']) == [1, 10, 10]
-            assert 'filters' in content
-            assert 'kernels' in content
-            assert 'latent_dim' in content
-            assert content['device'] == 'cuda'
+            assert list(content["input_shape"]) == [1, 10, 10]
+            assert "filters" in content
+            assert "kernels" in content
+            assert "latent_dim" in content
+            assert content["device"] == "cuda"
 
 
 class TestInterfaceBuilderBuildAll:
     """Test suite for build_all method"""
 
-    @patch.dict(os.environ, {'AMBERHOME': '/fake/amber'})
-    @patch('molecular_simulations.build.build_interface.mda')
+    @patch.dict(os.environ, {"AMBERHOME": "/fake/amber"})
+    @patch("molecular_simulations.build.build_interface.mda")
     def test_build_all_structure(self, mock_mda):
         """Test that build_all creates proper directory structure"""
         from molecular_simulations.build.build_interface import InterfaceBuilder
@@ -388,21 +469,27 @@ class TestInterfaceBuilderBuildAll:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
 
-            pdb_file = path / 'complex.pdb'
-            pdb_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            pdb_file = path / "complex.pdb"
+            pdb_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            target_file = path / 'target.pdb'
-            target_file.write_text("ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n")
+            target_file = path / "target.pdb"
+            target_file.write_text(
+                "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00  0.00\n"
+            )
 
-            binder_file = path / 'binder.pdb'
-            binder_file.write_text("ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n")
+            binder_file = path / "binder.pdb"
+            binder_file.write_text(
+                "ATOM      1  N   ALA B   1       10.000   10.000   10.000  1.00  0.00\n"
+            )
 
             interfaces = {
-                'site0': {
-                    'contact_sel': 'name CA and resid 10 11 12',
-                    'distance_sel': 'resid 10-12',
-                    'vector': [10.0, 0.0, 0.0],
-                    'com': [50.0, 50.0, 50.0]
+                "site0": {
+                    "contact_sel": "name CA and resid 10 11 12",
+                    "distance_sel": "resid 10-12",
+                    "vector": [10.0, 0.0, 0.0],
+                    "com": [50.0, 50.0, 50.0],
                 }
             }
 
@@ -411,15 +498,15 @@ class TestInterfaceBuilderBuildAll:
                 pdb=str(pdb_file),
                 interfaces=interfaces,
                 target=target_file,
-                binder=binder_file
+                binder=binder_file,
             )
 
             # Mock build method to avoid actual tleap calls
-            with patch.object(builder, 'build'):
+            with patch.object(builder, "build"):
                 builder.build_all()
 
                 # Check that directories were created
-                expected_root = path / 'target' / 'site0' / 'binder'
+                expected_root = path / "target" / "site0" / "binder"
                 # Note: The actual structure depends on target/binder filenames
 
 

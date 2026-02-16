@@ -5,15 +5,16 @@ as MDAnalysis AnalysisBase classes for ease of use and built-in parallelism.
 Adapted from BioPython and MDTraj implementations.
 """
 
+import warnings
+
 import MDAnalysis as mda
+import numpy as np
 from MDAnalysis.analysis.base import AnalysisBase
 from MDAnalysis.core import groups
 from MDAnalysis.guesser.tables import vdwradii
-import numpy as np
 from scipy.spatial import KDTree
-import warnings
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 
 class SASA(AnalysisBase):
@@ -45,18 +46,18 @@ class SASA(AnalysisBase):
         ValueError: If the Universe has no 'elements' property.
 
     Example:
-        >>> u = mda.Universe('system.prmtop', 'traj.dcd')
-        >>> sasa = SASA(u.select_atoms('protein'))
+        >>> u = mda.Universe("system.prmtop", "traj.dcd")
+        >>> sasa = SASA(u.select_atoms("protein"))
         >>> sasa.run()
         >>> print(sasa.results.sasa)
     """
 
     def __init__(
-        self, 
+        self,
         ag: mda.AtomGroup,
         probe_radius: float = 1.4,
         n_points: int = 256,
-        **kwargs
+        **kwargs,
     ):
         """Initialize the SASA analysis.
 
@@ -67,14 +68,13 @@ class SASA(AnalysisBase):
             **kwargs: Arguments for AnalysisBase.
         """
         if isinstance(ag, groups.UpdatingAtomGroup):
-            raise TypeError('UpdatingAtomGroups are not valid for SASA!')
-        
-        super(SASA, self).__init__(ag.universe.trajectory, **kwargs)
-        
-        if not hasattr(ag, 'elements'):
+            raise TypeError("UpdatingAtomGroups are not valid for SASA!")
+
+        super().__init__(ag.universe.trajectory, **kwargs)
+
+        if not hasattr(ag, "elements"):
             raise ValueError(
-                'Cannot assign atomic radii: '
-                'Universe has no `elements` property!'
+                "Cannot assign atomic radii: Universe has no `elements` property!"
             )
 
         self.ag = ag
@@ -100,7 +100,7 @@ class SASA(AnalysisBase):
             Array of shape (n_points, 3) with unit sphere coordinates.
         """
         dl = np.pi * (3 - np.sqrt(5))
-        dz = 2. / self.n_points
+        dz = 2.0 / self.n_points
         longitude = 0
         z = 1 - dz / 2
 
@@ -132,18 +132,14 @@ class SASA(AnalysisBase):
             available = self.points_available.copy()
             kdt_sphere = KDTree(sphere, 10)
 
-            for j in kdt.query_ball_point(
-                ag.positions[i], 
-                self.max_radii, 
-                workers=-1
-            ):
+            for j in kdt.query_ball_point(ag.positions[i], self.max_radii, workers=-1):
                 if j == i:
                     continue
                 if self.radii[j] < (self.radii[i] + self.radii[j]):
                     available -= {
-                        n for n in kdt_sphere.query_ball_point(
-                            self.ag.positions[j],
-                            self.radii[j]
+                        n
+                        for n in kdt_sphere.query_ball_point(
+                            self.ag.positions[j], self.radii[j]
                         )
                     }
 
@@ -168,7 +164,7 @@ class SASA(AnalysisBase):
         result = np.zeros(self.ag.n_residues)
         for i, atom in enumerate(self.ag.atoms):
             result[atom.resid - 1] += area[i]
-        
+
         self.results.sasa += result
 
     def _conclude(self):
@@ -179,7 +175,7 @@ class SASA(AnalysisBase):
         if self.n_frames != 0:
             self.results.sasa /= self.n_frames
 
-            
+
 class RelativeSASA(SASA):
     """Compute relative SASA for an AtomGroup.
 
@@ -202,18 +198,18 @@ class RelativeSASA(SASA):
         ValueError: If the Universe has no 'bonds' property.
 
     Example:
-        >>> u = mda.Universe('system.prmtop', 'traj.dcd')
-        >>> rsasa = RelativeSASA(u.select_atoms('protein'))
+        >>> u = mda.Universe("system.prmtop", "traj.dcd")
+        >>> rsasa = RelativeSASA(u.select_atoms("protein"))
         >>> rsasa.run()
         >>> print(rsasa.results.relative_area)
     """
 
     def __init__(
-        self, 
+        self,
         ag: mda.AtomGroup,
         probe_radius: float = 1.4,
         n_points: int = 256,
-        **kwargs
+        **kwargs,
     ):
         """Initialize the RelativeSASA analysis.
 
@@ -223,9 +219,9 @@ class RelativeSASA(SASA):
             n_points: Number of sphere points.
             **kwargs: Arguments for AnalysisBase.
         """
-        if not hasattr(ag, 'bonds'):
-            raise ValueError('Universe has no `bonds` property!')
-        super(RelativeSASA, self).__init__(ag, probe_radius, n_points, **kwargs)
+        if not hasattr(ag, "bonds"):
+            raise ValueError("Universe has no `bonds` property!")
+        super().__init__(ag, probe_radius, n_points, **kwargs)
 
     def _prepare(self):
         """Prepare for analysis by initializing results arrays.
@@ -246,29 +242,30 @@ class RelativeSASA(SASA):
         result = np.zeros(self.ag.n_residues)
         for i, atom in enumerate(self.ag.atoms):
             result[atom.resid - 1] += area[i]
-        
+
         self.results.sasa += result
 
         for res_index in self.ag.residues.resindices:
-            tri_peptide = self.ag.select_atoms(
-                f'byres (bonded resindex {res_index})'
-            )
+            tri_peptide = self.ag.select_atoms(f"byres (bonded resindex {res_index})")
 
             if len(tri_peptide) == 0:
                 continue
 
             tri_pep_area = self.measure_sasa(tri_peptide)
-            exposed_area = sum([
-                a for a, _id in zip(tri_pep_area, tri_peptide.resindices)
-                if _id == res_index
-            ])
+            exposed_area = sum(
+                [
+                    a
+                    for a, _id in zip(tri_pep_area, tri_peptide.resindices)
+                    if _id == res_index
+                ]
+            )
 
-            if exposed_area != 0.:
+            if exposed_area != 0.0:
                 result[res_index] /= exposed_area
 
-        self.results.relative_area += np.array([
-            result[_id] for _id in self.ag.residues.resindices
-        ])
+        self.results.relative_area += np.array(
+            [result[_id] for _id in self.ag.residues.resindices]
+        )
 
     def _conclude(self):
         """Post-process results by averaging over frames.

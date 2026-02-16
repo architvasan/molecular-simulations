@@ -7,14 +7,13 @@ changes during MD simulations using AMBER topology files.
 
 Coverage target: >50% of 454 statements (200+ statements covered)
 """
-import pytest
-import numpy as np
+
 import tempfile
 from pathlib import Path
-from typing import Any
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
-from collections import defaultdict
+from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pytest
 
 # Mark tests that don't require OpenMM as unit tests
 pytestmark = pytest.mark.unit
@@ -23,6 +22,7 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 # ResidueState Tests
 # ---------------------------------------------------------------------------
+
 
 class TestResidueStateInit:
     """Test suite for ResidueState class initialization."""
@@ -36,9 +36,9 @@ class TestResidueStateInit:
         from molecular_simulations.simulate.constantph.constantph import ResidueState
 
         residue_index = 10
-        atom_indices = {'N': 0, 'CA': 1, 'C': 2, 'O': 3}
-        particle_params = {0: {'N': (1.0, 0.1, 0.0), 'CA': (0.5, 0.2, 0.0)}}
-        exception_params = {0: {(10, 'N', 'CA'): (0.1, 0.3, 0.0)}}
+        atom_indices = {"N": 0, "CA": 1, "C": 2, "O": 3}
+        particle_params = {0: {"N": (1.0, 0.1, 0.0), "CA": (0.5, 0.2, 0.0)}}
+        exception_params = {0: {(10, "N", "CA"): (0.1, 0.3, 0.0)}}
         num_hydrogens = 2
 
         state = ResidueState(
@@ -84,13 +84,13 @@ class TestResidueStateInit:
         from molecular_simulations.simulate.constantph.constantph import ResidueState
 
         particle_params = {
-            0: {'N': (1.0, 0.1, 0.0)},  # NonbondedForce
-            1: {'N': (0.17,)},  # GBSAOBCForce (radius only)
+            0: {"N": (1.0, 0.1, 0.0)},  # NonbondedForce
+            1: {"N": (0.17,)},  # GBSAOBCForce (radius only)
         }
 
         state = ResidueState(
             residueIndex=15,
-            atomIndices={'N': 100, 'H': 101},
+            atomIndices={"N": 100, "H": 101},
             particleParameters=particle_params,
             exceptionParameters={},
             numHydrogens=1,
@@ -105,6 +105,7 @@ class TestResidueStateInit:
 # ResidueTitration Tests
 # ---------------------------------------------------------------------------
 
+
 class TestResidueTitrationInit:
     """Test suite for ResidueTitration class initialization."""
 
@@ -113,9 +114,11 @@ class TestResidueTitrationInit:
 
         ResidueTitration manages titration states for a single residue.
         """
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
-        variants = ['ASP', 'ASH']
+        variants = ["ASP", "ASH"]
         reference_energies = [0.0, 5.2]
 
         titration = ResidueTitration(
@@ -137,9 +140,11 @@ class TestResidueTitrationInit:
         Histidine can exist as HID (delta-protonated), HIE (epsilon-protonated),
         or HIP (doubly protonated).
         """
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
-        variants = ['HID', 'HIE', 'HIP']
+        variants = ["HID", "HIE", "HIP"]
         reference_energies = [0.0, 0.5, 4.5]
 
         titration = ResidueTitration(
@@ -155,9 +160,11 @@ class TestResidueTitrationInit:
 
         Lysine can exist as LYS (protonated) or LYN (neutral).
         """
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
-        variants = ['LYS', 'LYN']
+        variants = ["LYS", "LYN"]
         reference_energies = [0.0, 12.5]
 
         titration = ResidueTitration(
@@ -165,13 +172,14 @@ class TestResidueTitrationInit:
             referenceEnergies=reference_energies,
         )
 
-        assert titration.variants == ['LYS', 'LYN']
+        assert titration.variants == ["LYS", "LYN"]
         assert titration.referenceEnergies == [0.0, 12.5]
 
 
 # ---------------------------------------------------------------------------
 # ConstantPH Class Constants Tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHConstants:
     """Test suite for ConstantPH class constants and configuration."""
@@ -185,28 +193,47 @@ class TestConstantPHConstants:
         from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         # Standard amino acids
-        standard_residues = {'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU',
-                            'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE',
-                            'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL'}
+        standard_residues = {
+            "ALA",
+            "ARG",
+            "ASN",
+            "ASP",
+            "CYS",
+            "GLN",
+            "GLU",
+            "GLY",
+            "HIS",
+            "ILE",
+            "LEU",
+            "LYS",
+            "MET",
+            "PHE",
+            "PRO",
+            "SER",
+            "THR",
+            "TRP",
+            "TYR",
+            "VAL",
+        }
 
         # Verify subset relationship (not exact match due to protonation variants)
-        for res in ['ALA', 'GLY', 'PRO', 'VAL', 'ILE', 'LEU']:
+        for res in ["ALA", "GLY", "PRO", "VAL", "ILE", "LEU"]:
             assert res in ConstantPH.PROTEIN_RESIDUES
 
         # Verify protonation variants
-        assert 'ASH' in ConstantPH.PROTEIN_RESIDUES  # Protonated ASP
-        assert 'GLH' in ConstantPH.PROTEIN_RESIDUES  # Protonated GLU
-        assert 'HID' in ConstantPH.PROTEIN_RESIDUES  # Histidine variants
-        assert 'HIE' in ConstantPH.PROTEIN_RESIDUES
-        assert 'HIP' in ConstantPH.PROTEIN_RESIDUES
-        assert 'LYN' in ConstantPH.PROTEIN_RESIDUES  # Neutral lysine
-        assert 'CYM' in ConstantPH.PROTEIN_RESIDUES  # Deprotonated cysteine
-        assert 'CYX' in ConstantPH.PROTEIN_RESIDUES  # Disulfide cysteine
+        assert "ASH" in ConstantPH.PROTEIN_RESIDUES  # Protonated ASP
+        assert "GLH" in ConstantPH.PROTEIN_RESIDUES  # Protonated GLU
+        assert "HID" in ConstantPH.PROTEIN_RESIDUES  # Histidine variants
+        assert "HIE" in ConstantPH.PROTEIN_RESIDUES
+        assert "HIP" in ConstantPH.PROTEIN_RESIDUES
+        assert "LYN" in ConstantPH.PROTEIN_RESIDUES  # Neutral lysine
+        assert "CYM" in ConstantPH.PROTEIN_RESIDUES  # Deprotonated cysteine
+        assert "CYX" in ConstantPH.PROTEIN_RESIDUES  # Disulfide cysteine
 
         # Capping groups
-        assert 'ACE' in ConstantPH.PROTEIN_RESIDUES
-        assert 'NME' in ConstantPH.PROTEIN_RESIDUES
-        assert 'NHE' in ConstantPH.PROTEIN_RESIDUES
+        assert "ACE" in ConstantPH.PROTEIN_RESIDUES
+        assert "NME" in ConstantPH.PROTEIN_RESIDUES
+        assert "NHE" in ConstantPH.PROTEIN_RESIDUES
 
     def test_water_ion_names(self) -> None:
         """Test that WATER_ION_NAMES contains common water and ion residues.
@@ -216,29 +243,30 @@ class TestConstantPHConstants:
         from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         # Common water residue names
-        assert 'HOH' in ConstantPH.WATER_ION_NAMES
-        assert 'WAT' in ConstantPH.WATER_ION_NAMES
-        assert 'OPC' in ConstantPH.WATER_ION_NAMES
-        assert 'TIP3' in ConstantPH.WATER_ION_NAMES
-        assert 'SPC' in ConstantPH.WATER_ION_NAMES
+        assert "HOH" in ConstantPH.WATER_ION_NAMES
+        assert "WAT" in ConstantPH.WATER_ION_NAMES
+        assert "OPC" in ConstantPH.WATER_ION_NAMES
+        assert "TIP3" in ConstantPH.WATER_ION_NAMES
+        assert "SPC" in ConstantPH.WATER_ION_NAMES
 
         # Common ion residue names
-        assert 'Na+' in ConstantPH.WATER_ION_NAMES
-        assert 'Cl-' in ConstantPH.WATER_ION_NAMES
-        assert 'NA' in ConstantPH.WATER_ION_NAMES
-        assert 'CL' in ConstantPH.WATER_ION_NAMES
-        assert 'K+' in ConstantPH.WATER_ION_NAMES
-        assert 'SOD' in ConstantPH.WATER_ION_NAMES
-        assert 'CLA' in ConstantPH.WATER_ION_NAMES
-        assert 'POT' in ConstantPH.WATER_ION_NAMES
+        assert "Na+" in ConstantPH.WATER_ION_NAMES
+        assert "Cl-" in ConstantPH.WATER_ION_NAMES
+        assert "NA" in ConstantPH.WATER_ION_NAMES
+        assert "CL" in ConstantPH.WATER_ION_NAMES
+        assert "K+" in ConstantPH.WATER_ION_NAMES
+        assert "SOD" in ConstantPH.WATER_ION_NAMES
+        assert "CLA" in ConstantPH.WATER_ION_NAMES
+        assert "POT" in ConstantPH.WATER_ION_NAMES
 
     def test_ion_elements(self) -> None:
         """Test that ION_ELEMENTS contains common monovalent ion elements.
 
         This tuple is used to identify single-atom ion residues by element.
         """
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from openmm.app import element
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         # Check common monovalent cations
         assert element.sodium in ConstantPH.ION_ELEMENTS
@@ -257,6 +285,7 @@ class TestConstantPHConstants:
 # ---------------------------------------------------------------------------
 # ConstantPH setPH Tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHSetPH:
     """Test suite for ConstantPH.setPH method."""
@@ -348,6 +377,7 @@ class TestConstantPHWeights:
 # ConstantPH _find14Scale Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHFind14Scale:
     """Test suite for ConstantPH._find14Scale method."""
 
@@ -356,8 +386,9 @@ class TestConstantPHFind14Scale:
 
         AMBER uses 1/1.2 = 0.8333 for Coulomb 1-4 scaling.
         """
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from openmm import System
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -368,13 +399,14 @@ class TestConstantPHFind14Scale:
 
     def test_find_14_scale_from_forcefield(self) -> None:
         """Test _find14Scale extracts scale from ForceField object."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from openmm.app import ForceField
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
         # This will return the actual scale factor from the forcefield
-        ff = ForceField('amber14-all.xml')
+        ff = ForceField("amber14-all.xml")
         scale = cph._find14Scale(ff)
 
         # AMBER uses 0.8333 for Coulomb 1-4
@@ -395,6 +427,7 @@ class TestConstantPHFind14Scale:
 # ConstantPH _selectNewState Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHSelectNewState:
     """Test suite for ConstantPH._selectNewState method."""
 
@@ -405,13 +438,15 @@ class TestConstantPHSelectNewState:
         return the opposite state.
         """
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
         # Create a titration with 2 states
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, 0),
             ResidueState(0, {}, {}, {}, 1),
@@ -432,13 +467,15 @@ class TestConstantPHSelectNewState:
         different from the current one.
         """
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
         # Create a titration with 3 states (histidine)
-        titration = ResidueTitration(['HID', 'HIE', 'HIP'], [0.0, 0.5, 4.5])
+        titration = ResidueTitration(["HID", "HIE", "HIP"], [0.0, 0.5, 4.5])
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, 1),
             ResidueState(0, {}, {}, {}, 1),
@@ -457,6 +494,7 @@ class TestConstantPHSelectNewState:
 # ConstantPH _findExceptionIndices Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHFindExceptionIndices:
     """Test suite for ConstantPH._findExceptionIndices method."""
 
@@ -466,10 +504,11 @@ class TestConstantPHFindExceptionIndices:
         The method maps (residue_index, atom1_name, atom2_name) tuples to
         exception indices in the NonbondedForce.
         """
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
-        from openmm import System, NonbondedForce
+        from openmm import NonbondedForce, System
         from openmm.app import Topology
         from openmm.app.element import carbon, nitrogen
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -480,29 +519,30 @@ class TestConstantPHFindExceptionIndices:
 
         nb_force = NonbondedForce()
         nb_force.addParticle(-0.4, 0.3, 0.0)  # N
-        nb_force.addParticle(0.4, 0.3, 0.0)   # C
+        nb_force.addParticle(0.4, 0.3, 0.0)  # C
         nb_force.addException(0, 1, 0.0, 0.3, 0.0)  # Exception for bonded pair
         system.addForce(nb_force)
 
         # Build matching topology
         topology = Topology()
         chain = topology.addChain()
-        residue = topology.addResidue('ALA', chain)
-        topology.addAtom('N', nitrogen, residue)
-        topology.addAtom('C', carbon, residue)
+        residue = topology.addResidue("ALA", chain)
+        topology.addAtom("N", nitrogen, residue)
+        topology.addAtom("C", carbon, residue)
 
         indices = cph._findExceptionIndices(system, topology)
 
         # Should have entries for both (res, N, C) and (res, C, N)
-        assert (0, 'N', 'C') in indices
-        assert (0, 'C', 'N') in indices
-        assert indices[(0, 'N', 'C')] == 0
-        assert indices[(0, 'C', 'N')] == 0
+        assert (0, "N", "C") in indices
+        assert (0, "C", "N") in indices
+        assert indices[(0, "N", "C")] == 0
+        assert indices[(0, "C", "N")] == 0
 
 
 # ---------------------------------------------------------------------------
 # ConstantPH _findInterResidue14 Tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHFindInterResidue14:
     """Test suite for ConstantPH._findInterResidue14 method."""
@@ -513,11 +553,12 @@ class TestConstantPHFindInterResidue14:
         1-4 interactions across residue boundaries (e.g., backbone) need
         special handling during protonation state changes.
         """
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
-        from openmm import System, NonbondedForce
+        from openmm import NonbondedForce, System
         from openmm.app import Topology
         from openmm.app.element import carbon, nitrogen
         from openmm.unit import elementary_charge
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -540,12 +581,12 @@ class TestConstantPHFindInterResidue14:
         # Build topology with 2 residues
         topology = Topology()
         chain = topology.addChain()
-        res1 = topology.addResidue('ALA', chain)
-        topology.addAtom('N', nitrogen, res1)
-        topology.addAtom('C', carbon, res1)
-        res2 = topology.addResidue('GLY', chain)
-        topology.addAtom('N', nitrogen, res2)
-        topology.addAtom('C', carbon, res2)
+        res1 = topology.addResidue("ALA", chain)
+        topology.addAtom("N", nitrogen, res1)
+        topology.addAtom("C", carbon, res1)
+        res2 = topology.addResidue("GLY", chain)
+        topology.addAtom("N", nitrogen, res2)
+        topology.addAtom("C", carbon, res2)
 
         indices = cph._findInterResidue14(system, topology)
 
@@ -560,12 +601,13 @@ class TestConstantPHFindInterResidue14:
 # ConstantPH _buildAtomIndexMapping Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHBuildAtomIndexMapping:
     """Test suite for ConstantPH._buildAtomIndexMapping method."""
 
-    @patch('parmed.load_file')
-    @patch('molecular_simulations.simulate.constantph.constantph.AmberPrmtopFile')
-    @patch('molecular_simulations.simulate.constantph.constantph.AmberInpcrdFile')
+    @patch("parmed.load_file")
+    @patch("molecular_simulations.simulate.constantph.constantph.AmberPrmtopFile")
+    @patch("molecular_simulations.simulate.constantph.constantph.AmberInpcrdFile")
     def test_build_atom_index_mapping_structure(
         self, mock_inpcrd, mock_prmtop, mock_parmed
     ) -> None:
@@ -574,8 +616,9 @@ class TestConstantPHBuildAtomIndexMapping:
         The method builds a mapping from implicit system atom indices to
         explicit system atom indices.
         """
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from openmm import System
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -588,13 +631,13 @@ class TestConstantPHBuildAtomIndexMapping:
 
         # Create mock explicit residue with atoms
         mock_atom1 = MagicMock()
-        mock_atom1.name = 'N'
+        mock_atom1.name = "N"
         mock_atom1.index = 0
         mock_atom2 = MagicMock()
-        mock_atom2.name = 'CA'
+        mock_atom2.name = "CA"
         mock_atom2.index = 1
         mock_atom3 = MagicMock()
-        mock_atom3.name = 'C'
+        mock_atom3.name = "C"
         mock_atom3.index = 2
 
         mock_residue = MagicMock()
@@ -606,13 +649,13 @@ class TestConstantPHBuildAtomIndexMapping:
 
         # Create mock ParmEd residue
         mock_pmd_atom1 = MagicMock()
-        mock_pmd_atom1.name = 'N'
+        mock_pmd_atom1.name = "N"
         mock_pmd_atom1.idx = 0
         mock_pmd_atom2 = MagicMock()
-        mock_pmd_atom2.name = 'CA'
+        mock_pmd_atom2.name = "CA"
         mock_pmd_atom2.idx = 1
         mock_pmd_atom3 = MagicMock()
-        mock_pmd_atom3.name = 'C'
+        mock_pmd_atom3.name = "C"
         mock_pmd_atom3.idx = 2
 
         mock_pmd_residue = MagicMock()
@@ -624,7 +667,7 @@ class TestConstantPHBuildAtomIndexMapping:
 
         cph._buildAtomIndexMapping()
 
-        assert hasattr(cph, 'implicitAtomIndex')
+        assert hasattr(cph, "implicitAtomIndex")
         assert isinstance(cph.implicitAtomIndex, np.ndarray)
         assert len(cph.implicitAtomIndex) == 3
 
@@ -632,6 +675,7 @@ class TestConstantPHBuildAtomIndexMapping:
 # ---------------------------------------------------------------------------
 # ConstantPH GB Model Selection Tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHGBModel:
     """Test suite for GB model selection in ConstantPH."""
@@ -641,11 +685,12 @@ class TestConstantPHGBModel:
         from openmm.app import GBn2
 
         # Test the mapping logic
-        gb_model = 'GBn2'
-        if gb_model == 'GBn2':
+        gb_model = "GBn2"
+        if gb_model == "GBn2":
             implicit_solvent = GBn2
-        elif gb_model == 'OBC2':
+        elif gb_model == "OBC2":
             from openmm.app import OBC2
+
             implicit_solvent = OBC2
         else:
             implicit_solvent = None
@@ -656,11 +701,12 @@ class TestConstantPHGBModel:
         """Test that OBC2 model selection works correctly."""
         from openmm.app import OBC2
 
-        gb_model = 'OBC2'
-        if gb_model == 'GBn2':
+        gb_model = "OBC2"
+        if gb_model == "GBn2":
             from openmm.app import GBn2
+
             implicit_solvent = GBn2
-        elif gb_model == 'OBC2':
+        elif gb_model == "OBC2":
             implicit_solvent = OBC2
         else:
             implicit_solvent = None
@@ -669,12 +715,10 @@ class TestConstantPHGBModel:
 
     def test_gb_model_invalid_raises_error(self) -> None:
         """Test that invalid GB model raises ValueError."""
-        gb_model = 'InvalidModel'
+        gb_model = "InvalidModel"
 
         with pytest.raises(ValueError, match="Unknown GB model"):
-            if gb_model == 'GBn2':
-                pass
-            elif gb_model == 'OBC2':
+            if gb_model == "GBn2" or gb_model == "OBC2":
                 pass
             else:
                 raise ValueError(f"Unknown GB model: {gb_model}. Use 'GBn2' or 'OBC2'.")
@@ -683,6 +727,7 @@ class TestConstantPHGBModel:
 # ---------------------------------------------------------------------------
 # ConstantPH _applyStateToContext Tests (Logic)
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHApplyStateToContextLogic:
     """Test suite for _applyStateToContext parameter handling logic."""
@@ -697,12 +742,12 @@ class TestConstantPHApplyStateToContextLogic:
         # Create a state with particle parameters
         particle_params = {
             0: {
-                'N': (-0.4, 0.17, 0.0),
-                'H': (0.2, 0.05, 0.0),
-                'CA': (0.1, 0.17, 0.0),
+                "N": (-0.4, 0.17, 0.0),
+                "H": (0.2, 0.05, 0.0),
+                "CA": (0.1, 0.17, 0.0),
             },
         }
-        atom_indices = {'N': 10, 'H': 11, 'CA': 12}
+        atom_indices = {"N": 10, "H": 11, "CA": 12}
 
         state = ResidueState(
             residueIndex=5,
@@ -720,7 +765,7 @@ class TestConstantPHApplyStateToContextLogic:
                 if atom_name in state.atomIndices:
                     processed_atoms.append(atom_name)
 
-        assert set(processed_atoms) == {'N', 'H', 'CA'}
+        assert set(processed_atoms) == {"N", "H", "CA"}
 
     def test_apply_state_exception_params_iteration(self) -> None:
         """Test exception parameter iteration logic.
@@ -731,14 +776,14 @@ class TestConstantPHApplyStateToContextLogic:
 
         exception_params = {
             0: {
-                (5, 'N', 'H'): (0.0, 0.1, 0.0),
-                (5, 'N', 'CA'): (0.05, 0.2, 0.0),
+                (5, "N", "H"): (0.0, 0.1, 0.0),
+                (5, "N", "CA"): (0.05, 0.2, 0.0),
             },
         }
 
         state = ResidueState(
             residueIndex=5,
-            atomIndices={'N': 10, 'H': 11, 'CA': 12},
+            atomIndices={"N": 10, "H": 11, "CA": 12},
             particleParameters={},
             exceptionParameters=exception_params,
             numHydrogens=1,
@@ -755,6 +800,7 @@ class TestConstantPHApplyStateToContextLogic:
 # ---------------------------------------------------------------------------
 # ConstantPH _attemptPHChange Tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHAttemptPHChange:
     """Test suite for _attemptPHChange simulated tempering logic."""
@@ -786,8 +832,7 @@ class TestConstantPHAttemptPHChange:
         # Calculate expected probabilities
         hydrogens = 2
         log_prob = [
-            cph._weights[i] - hydrogens * np.log(10.0) * cph.pH[i]
-            for i in range(3)
+            cph._weights[i] - hydrogens * np.log(10.0) * cph.pH[i] for i in range(3)
         ]
         max_log_prob = max(log_prob)
         offset = max_log_prob + np.log(sum(np.exp(x - max_log_prob) for x in log_prob))
@@ -829,6 +874,7 @@ class TestConstantPHAttemptPHChange:
 # ---------------------------------------------------------------------------
 # ConstantPH _findNeighbors Tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstantPHFindNeighbors:
     """Test suite for _findNeighbors method."""
@@ -891,6 +937,7 @@ class TestConstantPHFindNeighbors:
 # ConstantPH setResidueState Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHSetResidueState:
     """Test suite for setResidueState method logic."""
 
@@ -900,9 +947,11 @@ class TestConstantPHSetResidueState:
         The method should update the titration's currentIndex after
         applying the new state.
         """
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.currentIndex = 0
 
         # Simulate state update
@@ -916,12 +965,13 @@ class TestConstantPHSetResidueState:
 # Integration-style Tests with Mocks
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHInitialization:
     """Test suite for ConstantPH initialization with extensive mocking."""
 
-    @patch('molecular_simulations.simulate.constantph.constantph.pmd')
-    @patch('molecular_simulations.simulate.constantph.constantph.AmberInpcrdFile')
-    @patch('molecular_simulations.simulate.constantph.constantph.AmberPrmtopFile')
+    @patch("molecular_simulations.simulate.constantph.constantph.pmd")
+    @patch("molecular_simulations.simulate.constantph.constantph.AmberInpcrdFile")
+    @patch("molecular_simulations.simulate.constantph.constantph.AmberPrmtopFile")
     def test_init_stores_file_paths(
         self, mock_prmtop_class, mock_inpcrd_class, mock_pmd
     ) -> None:
@@ -929,8 +979,8 @@ class TestConstantPHInitialization:
         from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            prmtop = Path(tmpdir) / 'system.prmtop'
-            inpcrd = Path(tmpdir) / 'system.inpcrd'
+            prmtop = Path(tmpdir) / "system.prmtop"
+            inpcrd = Path(tmpdir) / "system.inpcrd"
             prmtop.write_text("mock")
             inpcrd.write_text("mock")
 
@@ -948,7 +998,6 @@ class TestConstantPHInitialization:
 
     def test_init_ph_list_conversion(self) -> None:
         """Test ConstantPH converts single pH to list."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from collections.abc import Sequence
 
         # Test the pH conversion logic
@@ -973,14 +1022,15 @@ class TestConstantPHInitialization:
 # Parametrized Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "variants,expected_count",
     [
-        (['ASP', 'ASH'], 2),
-        (['GLU', 'GLH'], 2),
-        (['HID', 'HIE', 'HIP'], 3),
-        (['LYS', 'LYN'], 2),
-        (['CYS', 'CYM'], 2),
+        (["ASP", "ASH"], 2),
+        (["GLU", "GLH"], 2),
+        (["HID", "HIE", "HIP"], 3),
+        (["LYS", "LYN"], 2),
+        (["CYS", "CYM"], 2),
     ],
 )
 class TestResidueTitrationParametrized:
@@ -990,7 +1040,9 @@ class TestResidueTitrationParametrized:
         self, variants: list[str], expected_count: int
     ) -> None:
         """Test ResidueTitration stores correct number of variants."""
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
         ref_energies = [0.0] * expected_count
         titration = ResidueTitration(variants, ref_energies)
@@ -1029,16 +1081,16 @@ class TestConstantPHSetPHParametrized:
 @pytest.mark.parametrize(
     "residue_name,is_protein",
     [
-        ('ALA', True),
-        ('GLY', True),
-        ('ASP', True),
-        ('ASH', True),
-        ('HIP', True),
-        ('HOH', False),
-        ('WAT', False),
-        ('NA', False),
-        ('POPC', False),
-        ('LIG', False),
+        ("ALA", True),
+        ("GLY", True),
+        ("ASP", True),
+        ("ASH", True),
+        ("HIP", True),
+        ("HOH", False),
+        ("WAT", False),
+        ("NA", False),
+        ("POPC", False),
+        ("LIG", False),
     ],
 )
 class TestConstantPHProteinResidueIdentification:
@@ -1058,6 +1110,7 @@ class TestConstantPHProteinResidueIdentification:
 # Edge Case Tests
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHEdgeCases:
     """Test suite for edge cases and boundary conditions."""
 
@@ -1070,7 +1123,7 @@ class TestConstantPHEdgeCases:
 
         state = ResidueState(
             residueIndex=10,
-            atomIndices={'N': 0, 'CA': 1},
+            atomIndices={"N": 0, "CA": 1},
             particleParameters={},
             exceptionParameters={},
             numHydrogens=0,
@@ -1083,10 +1136,12 @@ class TestConstantPHEdgeCases:
 
         Reference energies can be negative depending on the energy reference.
         """
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
         titration = ResidueTitration(
-            variants=['STATE1', 'STATE2'],
+            variants=["STATE1", "STATE2"],
             referenceEnergies=[-10.0, 5.0],
         )
 
@@ -1099,18 +1154,18 @@ class TestConstantPHEdgeCases:
         Although rare, some residues could have many protonation states.
         """
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
         titration = ResidueTitration(
-            variants=['S0', 'S1', 'S2', 'S3'],
+            variants=["S0", "S1", "S2", "S3"],
             referenceEnergies=[0.0, 1.0, 2.0, 3.0],
         )
-        titration.implicitStates = [
-            ResidueState(0, {}, {}, {}, i) for i in range(4)
-        ]
+        titration.implicitStates = [ResidueState(0, {}, {}, {}, i) for i in range(4)]
         titration.currentIndex = 2
 
         # Verify we can always get a different state
@@ -1137,6 +1192,7 @@ class TestConstantPHEdgeCases:
 # Titration State Management Tests
 # ---------------------------------------------------------------------------
 
+
 class TestTitrationStateManagement:
     """Test suite for titration state tracking and management."""
 
@@ -1145,12 +1201,14 @@ class TestTitrationStateManagement:
 
         The protonatedIndex should point to the state with most hydrogens.
         """
-        from molecular_simulations.simulate.constantph.constantph import (
-            ResidueTitration, ResidueState
-        )
         import numpy as np
 
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueState,
+            ResidueTitration,
+        )
+
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, 0),  # ASP - deprotonated
             ResidueState(0, {}, {}, {}, 1),  # ASH - protonated
@@ -1168,12 +1226,14 @@ class TestTitrationStateManagement:
 
         HIP (doubly protonated) should have the most hydrogens.
         """
-        from molecular_simulations.simulate.constantph.constantph import (
-            ResidueTitration, ResidueState
-        )
         import numpy as np
 
-        titration = ResidueTitration(['HID', 'HIE', 'HIP'], [0.0, 0.5, 4.5])
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueState,
+            ResidueTitration,
+        )
+
+        titration = ResidueTitration(["HID", "HIE", "HIP"], [0.0, 0.5, 4.5])
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, 1),  # HID - one H
             ResidueState(0, {}, {}, {}, 1),  # HIE - one H
@@ -1188,9 +1248,11 @@ class TestTitrationStateManagement:
 
     def test_current_index_tracking(self) -> None:
         """Test that currentIndex correctly tracks state changes."""
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
-        titration = ResidueTitration(['GLU', 'GLH'], [0.0, 4.8])
+        titration = ResidueTitration(["GLU", "GLH"], [0.0, 4.8])
         titration.currentIndex = 0
 
         # Simulate MC accept
@@ -1205,6 +1267,7 @@ class TestTitrationStateManagement:
 # ---------------------------------------------------------------------------
 # Energy Calculation Logic Tests
 # ---------------------------------------------------------------------------
+
 
 class TestEnergyCalculationLogic:
     """Test suite for energy calculation logic used in MC acceptance."""
@@ -1259,6 +1322,7 @@ class TestEnergyCalculationLogic:
 # Reference Energy Tests
 # ---------------------------------------------------------------------------
 
+
 class TestReferenceEnergyHandling:
     """Test suite for reference energy calculations."""
 
@@ -1286,6 +1350,7 @@ class TestReferenceEnergyHandling:
 # ---------------------------------------------------------------------------
 # Wang-Landau Adaptive Weighting Tests
 # ---------------------------------------------------------------------------
+
 
 class TestWangLandauWeighting:
     """Test suite for Wang-Landau adaptive weighting logic."""
@@ -1318,9 +1383,11 @@ class TestWangLandauWeighting:
         current_probability = 0.999
         weight_update_factor = 1.0
 
-        if (not has_made_transition and
-            current_probability > 0.99 and
-            weight_update_factor < 1024.0):
+        if (
+            not has_made_transition
+            and current_probability > 0.99
+            and weight_update_factor < 1024.0
+        ):
             weight_update_factor *= 2.0
 
         assert weight_update_factor == 2.0
@@ -1340,6 +1407,7 @@ class TestWangLandauWeighting:
 # Additional Method Tests for Higher Coverage
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHFindResidueStatesLogic:
     """Test suite for _findResidueStates method logic."""
 
@@ -1353,15 +1421,15 @@ class TestConstantPHFindResidueStatesLogic:
         # Verify ResidueState structure for building
         state = ResidueState(
             residueIndex=0,
-            atomIndices={'N': 0, 'H': 1},
-            particleParameters={0: {'N': (0.1, 0.2, 0.0)}},
+            atomIndices={"N": 0, "H": 1},
+            particleParameters={0: {"N": (0.1, 0.2, 0.0)}},
             exceptionParameters={},
             numHydrogens=1,
         )
 
         assert isinstance(state.atomIndices, dict)
         assert isinstance(state.particleParameters, dict)
-        assert 'N' in state.atomIndices
+        assert "N" in state.atomIndices
 
     def test_find_residue_states_hydrogen_counting(self) -> None:
         """Test that hydrogen counting logic works correctly.
@@ -1371,7 +1439,12 @@ class TestConstantPHFindResidueStatesLogic:
         from openmm.app import element
 
         # Simulate hydrogen counting logic
-        atom_elements = [element.nitrogen, element.hydrogen, element.hydrogen, element.carbon]
+        atom_elements = [
+            element.nitrogen,
+            element.hydrogen,
+            element.hydrogen,
+            element.carbon,
+        ]
         num_hydrogens = sum(1 for el in atom_elements if el == element.hydrogen)
 
         assert num_hydrogens == 2
@@ -1385,7 +1458,7 @@ class TestConstantPHBuildProtonationStatesLogic:
 
         The method iterates through variants for each titratable residue.
         """
-        residue_variants = {10: ['ASP', 'ASH'], 15: ['GLU', 'GLH']}
+        residue_variants = {10: ["ASP", "ASH"], 15: ["GLU", "GLH"]}
 
         # Simulate variant iteration
         variant_index = 0
@@ -1397,16 +1470,17 @@ class TestConstantPHBuildProtonationStatesLogic:
             for res_index, variants in residue_variants.items():
                 if variant_index < len(variants):
                     current_variant = variants[variant_index]
-                    assert current_variant in ['ASP', 'ASH', 'GLU', 'GLH']
+                    assert current_variant in ["ASP", "ASH", "GLU", "GLH"]
             variant_index += 1
 
     def test_protonated_index_assignment(self) -> None:
         """Test protonatedIndex is assigned to state with most hydrogens."""
         from molecular_simulations.simulate.constantph.constantph import (
-            ResidueTitration, ResidueState
+            ResidueState,
+            ResidueTitration,
         )
 
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.implicitStates = [
             ResidueState(10, {}, {}, {}, 0),  # deprotonated
             ResidueState(10, {}, {}, {}, 1),  # protonated
@@ -1431,12 +1505,14 @@ class TestConstantPHAttemptMCStepLogic:
         Positions are mapped using implicitAtomIndex array.
         """
         # Simulate position mapping
-        explicit_positions = np.array([
-            [0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0],
-            [2.0, 0.0, 0.0],
-            [3.0, 0.0, 0.0],  # Water - will be excluded
-        ])
+        explicit_positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0],
+                [3.0, 0.0, 0.0],  # Water - will be excluded
+            ]
+        )
 
         # Mapping: implicit atoms 0,1,2 correspond to explicit 0,1,2
         implicit_atom_index = np.array([0, 1, 2])
@@ -1499,13 +1575,12 @@ class TestConstantPHApplyStateToContextMethod:
 
         Other force types (HarmonicBondForce, etc.) are skipped.
         """
-        from openmm import NonbondedForce, GBSAOBCForce, HarmonicBondForce
+        from openmm import GBSAOBCForce, HarmonicBondForce, NonbondedForce
 
         forces = [NonbondedForce(), HarmonicBondForce(), GBSAOBCForce()]
 
         updatable_forces = [
-            f for f in forces
-            if isinstance(f, (NonbondedForce, GBSAOBCForce))
+            f for f in forces if isinstance(f, (NonbondedForce, GBSAOBCForce))
         ]
 
         assert len(updatable_forces) == 2
@@ -1518,13 +1593,13 @@ class TestConstantPHApplyStateToContextMethod:
         Exception keys are (residue_index, atom1_name, atom2_name).
         """
         exception_index = {
-            (5, 'N', 'H'): 0,
-            (5, 'H', 'N'): 0,  # Symmetric entry
-            (5, 'N', 'CA'): 1,
+            (5, "N", "H"): 0,
+            (5, "H", "N"): 0,  # Symmetric entry
+            (5, "N", "CA"): 1,
         }
 
         # Verify key lookup works
-        key = (5, 'N', 'H')
+        key = (5, "N", "H")
         assert key in exception_index
         assert exception_index[key] == 0
 
@@ -1549,9 +1624,9 @@ class TestConstantPHMapStatesToExplicitSystem:
         """Test atom index extraction from explicit topology residue."""
         # Simulate atom index extraction
         mock_atoms = [
-            MagicMock(name='N', index=100),
-            MagicMock(name='CA', index=101),
-            MagicMock(name='C', index=102),
+            MagicMock(name="N", index=100),
+            MagicMock(name="CA", index=101),
+            MagicMock(name="C", index=102),
         ]
 
         for atom in mock_atoms:
@@ -1559,7 +1634,7 @@ class TestConstantPHMapStatesToExplicitSystem:
 
         atom_indices = {atom.name: atom.index for atom in mock_atoms}
 
-        assert atom_indices == {'N': 100, 'CA': 101, 'C': 102}
+        assert atom_indices == {"N": 100, "CA": 101, "C": 102}
 
     def test_hydrogen_index_tracking(self) -> None:
         """Test tracking of hydrogen indices for multi-site titration.
@@ -1570,15 +1645,14 @@ class TestConstantPHMapStatesToExplicitSystem:
 
         # Simulate hydrogen detection
         mock_atoms = [
-            ('N', element.nitrogen, 100),
-            ('H', element.hydrogen, 101),
-            ('CA', element.carbon, 102),
-            ('HA', element.hydrogen, 103),
+            ("N", element.nitrogen, 100),
+            ("H", element.hydrogen, 101),
+            ("CA", element.carbon, 102),
+            ("HA", element.hydrogen, 103),
         ]
 
         hydrogen_indices = [
-            idx for name, el, idx in mock_atoms
-            if el == element.hydrogen
+            idx for name, el, idx in mock_atoms if el == element.hydrogen
         ]
 
         assert hydrogen_indices == [101, 103]
@@ -1594,25 +1668,24 @@ class TestConstantPHBuildImplicitSystemLogic:
         """
         from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
-        residue_names = ['ALA', 'GLY', 'HOH', 'HOH', 'NA', 'POPC', 'LIG']
+        residue_names = ["ALA", "GLY", "HOH", "HOH", "NA", "POPC", "LIG"]
 
         kept = [
-            name for name in residue_names
-            if name not in ConstantPH.WATER_ION_NAMES
+            name for name in residue_names if name not in ConstantPH.WATER_ION_NAMES
         ]
 
-        assert 'ALA' in kept
-        assert 'GLY' in kept
-        assert 'POPC' in kept  # Lipid kept
-        assert 'LIG' in kept   # Ligand kept
-        assert 'HOH' not in kept
-        assert 'NA' not in kept
+        assert "ALA" in kept
+        assert "GLY" in kept
+        assert "POPC" in kept  # Lipid kept
+        assert "LIG" in kept  # Ligand kept
+        assert "HOH" not in kept
+        assert "NA" not in kept
 
     def test_residue_index_mapping_construction(self) -> None:
         """Test construction of implicit to explicit residue mapping."""
         # Simulate mapping construction
-        explicit_residues = ['ALA', 'GLY', 'HOH', 'HOH', 'NA', 'ASP']
-        water_ion_names = {'HOH', 'NA'}
+        explicit_residues = ["ALA", "GLY", "HOH", "HOH", "NA", "ASP"]
+        water_ion_names = {"HOH", "NA"}
 
         implicit_to_explicit = []
         explicit_to_implicit = {}
@@ -1631,8 +1704,8 @@ class TestConstantPHBuildImplicitSystemLogic:
         """Test default solvent and solute dielectric values."""
         implicit_args = {}
 
-        solvent_dielectric = implicit_args.get('solventDielectric', 78.5)
-        solute_dielectric = implicit_args.get('soluteDielectric', 1.0)
+        solvent_dielectric = implicit_args.get("solventDielectric", 78.5)
+        solute_dielectric = implicit_args.get("soluteDielectric", 1.0)
 
         assert solvent_dielectric == 78.5
         assert solute_dielectric == 1.0
@@ -1645,19 +1718,18 @@ class TestConstantPHBuildProteinOnlyTopologyLogic:
         """Test filtering of non-protein residues."""
         from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
-        residue_names = ['ALA', 'POPC', 'GLY', 'LIG', 'ASP', 'HOH']
+        residue_names = ["ALA", "POPC", "GLY", "LIG", "ASP", "HOH"]
 
         protein_residues = [
-            name for name in residue_names
-            if name in ConstantPH.PROTEIN_RESIDUES
+            name for name in residue_names if name in ConstantPH.PROTEIN_RESIDUES
         ]
 
-        assert protein_residues == ['ALA', 'GLY', 'ASP']
+        assert protein_residues == ["ALA", "GLY", "ASP"]
 
     def test_protein_index_mapping(self) -> None:
         """Test protein to explicit residue index mapping."""
-        residue_names = ['ALA', 'POPC', 'GLY', 'LIG', 'ASP']
-        protein_residue_names = {'ALA', 'GLY', 'ASP'}
+        residue_names = ["ALA", "POPC", "GLY", "LIG", "ASP"]
+        protein_residue_names = {"ALA", "GLY", "ASP"}
 
         protein_to_explicit = []
         explicit_to_protein = {}
@@ -1698,7 +1770,9 @@ class TestConstantPHBuildExplicitSystemLogic:
 
         assert system.getParticleMass(0).value_in_unit(dalton) == 0.0
         assert system.getParticleMass(1).value_in_unit(dalton) == 0.0
-        assert system.getParticleMass(2).value_in_unit(dalton) == 18.0  # Water unchanged
+        assert (
+            system.getParticleMass(2).value_in_unit(dalton) == 18.0
+        )  # Water unchanged
 
     def test_platform_property_handling(self) -> None:
         """Test platform property handling for context creation."""
@@ -1715,7 +1789,7 @@ class TestConstantPHBuildExplicitSystemLogic:
         assert use_properties is False
 
         # With properties
-        properties = {'Precision': 'mixed'}
+        properties = {"Precision": "mixed"}
         if properties is None:
             use_properties = False
         else:
@@ -1744,7 +1818,7 @@ class TestConstantPHTemperatureHandling:
 
     def test_kt_calculation(self) -> None:
         """Test kT calculation for Metropolis criterion."""
-        from openmm.unit import kelvin, MOLAR_GAS_CONSTANT_R, kilojoules_per_mole
+        from openmm.unit import MOLAR_GAS_CONSTANT_R, kelvin, kilojoules_per_mole
 
         temperature = 300.0 * kelvin
         kT = MOLAR_GAS_CONSTANT_R * temperature
@@ -1813,14 +1887,15 @@ class TestConstantPHExcludeResiduesDeprecation:
 # Additional Parametrized Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "gb_model,expected_valid",
     [
-        ('GBn2', True),
-        ('OBC2', True),
-        ('HCT', False),
-        ('GBSA', False),
-        ('', False),
+        ("GBn2", True),
+        ("OBC2", True),
+        ("HCT", False),
+        ("GBSA", False),
+        ("", False),
     ],
 )
 class TestConstantPHGBModelParametrized:
@@ -1828,7 +1903,7 @@ class TestConstantPHGBModelParametrized:
 
     def test_gb_model_validation(self, gb_model: str, expected_valid: bool) -> None:
         """Test GB model validation for different model strings."""
-        valid_models = {'GBn2', 'OBC2'}
+        valid_models = {"GBn2", "OBC2"}
         is_valid = gb_model in valid_models
         assert is_valid == expected_valid
 
@@ -1836,20 +1911,20 @@ class TestConstantPHGBModelParametrized:
 @pytest.mark.parametrize(
     "residue_name,expected_strip",
     [
-        ('HOH', True),
-        ('WAT', True),
-        ('TIP3', True),
-        ('SPC', True),
-        ('OPC', True),
-        ('Na+', True),
-        ('Cl-', True),
-        ('NA', True),
-        ('CL', True),
-        ('SOD', True),
-        ('CLA', True),
-        ('ALA', False),
-        ('POPC', False),
-        ('LIG', False),
+        ("HOH", True),
+        ("WAT", True),
+        ("TIP3", True),
+        ("SPC", True),
+        ("OPC", True),
+        ("Na+", True),
+        ("Cl-", True),
+        ("NA", True),
+        ("CL", True),
+        ("SOD", True),
+        ("CLA", True),
+        ("ALA", False),
+        ("POPC", False),
+        ("LIG", False),
     ],
 )
 class TestConstantPHWaterIonStripping:
@@ -1867,30 +1942,35 @@ class TestConstantPHWaterIonStripping:
 # Tests for _applyStateToContext Method
 # ---------------------------------------------------------------------------
 
+
 class TestApplyStateToContext:
     """Test suite for _applyStateToContext method with mocked contexts."""
 
     def test_apply_state_to_context_with_nonbonded_force(self) -> None:
         """Test _applyStateToContext updates NonbondedForce parameters."""
+        from openmm import Context, NonbondedForce, System, VerletIntegrator
+        from openmm.unit import elementary_charge, femtoseconds
+
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueState
+            ConstantPH,
+            ResidueState,
         )
-        from openmm import System, NonbondedForce, Context, VerletIntegrator
-        from openmm.unit import femtoseconds, elementary_charge
 
         cph = object.__new__(ConstantPH)
 
         # Create a simple system with NonbondedForce
         system = System()
         system.addParticle(14.0)  # N
-        system.addParticle(1.0)   # H
+        system.addParticle(1.0)  # H
         system.addParticle(12.0)  # C
 
         nb_force = NonbondedForce()
         nb_force.addParticle(-0.4, 0.17, 0.0)  # N
-        nb_force.addParticle(0.2, 0.05, 0.0)   # H
-        nb_force.addParticle(0.2, 0.17, 0.0)   # C
-        nb_force.addException(0, 1, 0.02, 0.1, 0.0)  # N-H exception (non-zero chargeProd)
+        nb_force.addParticle(0.2, 0.05, 0.0)  # H
+        nb_force.addParticle(0.2, 0.17, 0.0)  # C
+        nb_force.addException(
+            0, 1, 0.02, 0.1, 0.0
+        )  # N-H exception (non-zero chargeProd)
         system.addForce(nb_force)
 
         # Create context
@@ -1901,29 +1981,31 @@ class TestApplyStateToContext:
         # Create state with new parameters
         state = ResidueState(
             residueIndex=0,
-            atomIndices={'N': 0, 'H': 1, 'C': 2},
+            atomIndices={"N": 0, "H": 1, "C": 2},
             particleParameters={
                 0: {
-                    'N': (-0.5, 0.17, 0.0),
-                    'H': (0.3, 0.05, 0.0),
-                    'C': (0.2, 0.17, 0.0),
+                    "N": (-0.5, 0.17, 0.0),
+                    "H": (0.3, 0.05, 0.0),
+                    "C": (0.2, 0.17, 0.0),
                 }
             },
             exceptionParameters={
                 0: {
-                    (0, 'N', 'H'): (0.01, 0.1, 0.0),
+                    (0, "N", "H"): (0.01, 0.1, 0.0),
                 }
             },
             numHydrogens=1,
         )
 
         # Build exception index
-        exception_index = {(0, 'N', 'H'): 0, (0, 'H', 'N'): 0}
+        exception_index = {(0, "N", "H"): 0, (0, "H", "N"): 0}
         inter_residue_14 = {}
         coulomb_14_scale = 1.0 / 1.2
 
         # Apply state
-        cph._applyStateToContext(state, context, exception_index, inter_residue_14, coulomb_14_scale)
+        cph._applyStateToContext(
+            state, context, exception_index, inter_residue_14, coulomb_14_scale
+        )
 
         # Verify parameters were updated
         force = context.getSystem().getForce(0)
@@ -1932,11 +2014,13 @@ class TestApplyStateToContext:
 
     def test_apply_state_to_context_with_gbsa_force(self) -> None:
         """Test _applyStateToContext updates GBSAOBCForce parameters."""
-        from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueState
-        )
-        from openmm import System, GBSAOBCForce, Context, VerletIntegrator
+        from openmm import Context, GBSAOBCForce, System, VerletIntegrator
         from openmm.unit import femtoseconds, nanometers
+
+        from molecular_simulations.simulate.constantph.constantph import (
+            ConstantPH,
+            ResidueState,
+        )
 
         cph = object.__new__(ConstantPH)
 
@@ -1958,11 +2042,11 @@ class TestApplyStateToContext:
         # Create state with GBSAOBCForce parameters
         state = ResidueState(
             residueIndex=0,
-            atomIndices={'N': 0, 'H': 1},
+            atomIndices={"N": 0, "H": 1},
             particleParameters={
                 0: {
-                    'N': (-0.5, 0.17 * nanometers, 1.0),
-                    'H': (0.3, 0.12 * nanometers, 1.0),
+                    "N": (-0.5, 0.17 * nanometers, 1.0),
+                    "H": (0.3, 0.12 * nanometers, 1.0),
                 }
             },
             exceptionParameters={},
@@ -1974,15 +2058,19 @@ class TestApplyStateToContext:
         coulomb_14_scale = 1.0 / 1.2
 
         # Apply state - should not raise
-        cph._applyStateToContext(state, context, exception_index, inter_residue_14, coulomb_14_scale)
+        cph._applyStateToContext(
+            state, context, exception_index, inter_residue_14, coulomb_14_scale
+        )
 
     def test_apply_state_skips_non_updatable_forces(self) -> None:
         """Test _applyStateToContext skips HarmonicBondForce etc."""
-        from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueState
-        )
-        from openmm import System, HarmonicBondForce, Context, VerletIntegrator
+        from openmm import Context, HarmonicBondForce, System, VerletIntegrator
         from openmm.unit import femtoseconds
+
+        from molecular_simulations.simulate.constantph.constantph import (
+            ConstantPH,
+            ResidueState,
+        )
 
         cph = object.__new__(ConstantPH)
 
@@ -2000,9 +2088,9 @@ class TestApplyStateToContext:
 
         state = ResidueState(
             residueIndex=0,
-            atomIndices={'N': 0, 'H': 1},
+            atomIndices={"N": 0, "H": 1},
             particleParameters={
-                0: {'N': (14.0,), 'H': (1.0,)}  # Mass params would not be applicable
+                0: {"N": (14.0,), "H": (1.0,)}  # Mass params would not be applicable
             },
             exceptionParameters={},
             numHydrogens=1,
@@ -2013,13 +2101,13 @@ class TestApplyStateToContext:
 
     def test_apply_state_updates_inter_residue_14(self) -> None:
         """Test _applyStateToContext updates inter-residue 1-4 interactions."""
+        from openmm import Context, NonbondedForce, System, VerletIntegrator
+        from openmm.unit import elementary_charge, femtoseconds
+
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueState
+            ConstantPH,
+            ResidueState,
         )
-        from openmm import System, NonbondedForce, Context, VerletIntegrator
-        from openmm.unit import femtoseconds, elementary_charge
-        from openmm.app import Topology
-        from openmm.app.element import carbon, nitrogen
 
         cph = object.__new__(ConstantPH)
 
@@ -2029,9 +2117,9 @@ class TestApplyStateToContext:
             system.addParticle(12.0)
 
         nb_force = NonbondedForce()
-        nb_force.addParticle(0.5, 0.3, 0.0)   # Res 0, atom 0
+        nb_force.addParticle(0.5, 0.3, 0.0)  # Res 0, atom 0
         nb_force.addParticle(-0.5, 0.3, 0.0)  # Res 0, atom 1
-        nb_force.addParticle(0.3, 0.3, 0.0)   # Res 1, atom 2
+        nb_force.addParticle(0.3, 0.3, 0.0)  # Res 1, atom 2
         nb_force.addParticle(-0.3, 0.3, 0.0)  # Res 1, atom 3
         # Intra-residue exception
         nb_force.addException(0, 1, 0.0, 0.3, 0.0)
@@ -2045,22 +2133,24 @@ class TestApplyStateToContext:
 
         state = ResidueState(
             residueIndex=0,
-            atomIndices={'C1': 0, 'C2': 1},
+            atomIndices={"C1": 0, "C2": 1},
             particleParameters={
                 0: {
-                    'C1': (0.6, 0.3, 0.0),  # Changed charge
-                    'C2': (-0.6, 0.3, 0.0),
+                    "C1": (0.6, 0.3, 0.0),  # Changed charge
+                    "C2": (-0.6, 0.3, 0.0),
                 }
             },
-            exceptionParameters={0: {(0, 'C1', 'C2'): (0.0, 0.3, 0.0)}},
+            exceptionParameters={0: {(0, "C1", "C2"): (0.0, 0.3, 0.0)}},
             numHydrogens=0,
         )
 
-        exception_index = {(0, 'C1', 'C2'): 0, (0, 'C2', 'C1'): 0}
+        exception_index = {(0, "C1", "C2"): 0, (0, "C2", "C1"): 0}
         inter_residue_14 = {0: [1]}  # Exception index 1 is inter-residue for res 0
         coulomb_14_scale = 1.0 / 1.2
 
-        cph._applyStateToContext(state, context, exception_index, inter_residue_14, coulomb_14_scale)
+        cph._applyStateToContext(
+            state, context, exception_index, inter_residue_14, coulomb_14_scale
+        )
 
         # Check that inter-residue exception was updated
         force = context.getSystem().getForce(0)
@@ -2068,22 +2158,26 @@ class TestApplyStateToContext:
         # q1 = 0.6 (new), q2 = 0.3 (unchanged atom 2)
         # new charge_prod should be coulomb_14_scale * q1 * q2
         expected = coulomb_14_scale * (-0.6) * 0.3
-        assert charge_prod.value_in_unit(elementary_charge**2) == pytest.approx(expected, rel=0.01)
+        assert charge_prod.value_in_unit(elementary_charge**2) == pytest.approx(
+            expected, rel=0.01
+        )
 
 
 # ---------------------------------------------------------------------------
 # Tests for _findExceptionIndices Method
 # ---------------------------------------------------------------------------
 
+
 class TestFindExceptionIndicesMethod:
     """Test suite for _findExceptionIndices method."""
 
     def test_find_exception_indices_multiple_residues(self) -> None:
         """Test _findExceptionIndices with multiple residues."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
-        from openmm import System, NonbondedForce
+        from openmm import NonbondedForce, System
         from openmm.app import Topology
-        from openmm.app.element import carbon, nitrogen, hydrogen
+        from openmm.app.element import carbon, nitrogen
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -2106,34 +2200,35 @@ class TestFindExceptionIndicesMethod:
         # Build topology
         topology = Topology()
         chain = topology.addChain()
-        res0 = topology.addResidue('ALA', chain)
-        topology.addAtom('N', nitrogen, res0)
-        topology.addAtom('CA', carbon, res0)
-        topology.addAtom('C', carbon, res0)
-        res1 = topology.addResidue('GLY', chain)
-        topology.addAtom('N', nitrogen, res1)
-        topology.addAtom('CA', carbon, res1)
-        topology.addAtom('C', carbon, res1)
+        res0 = topology.addResidue("ALA", chain)
+        topology.addAtom("N", nitrogen, res0)
+        topology.addAtom("CA", carbon, res0)
+        topology.addAtom("C", carbon, res0)
+        res1 = topology.addResidue("GLY", chain)
+        topology.addAtom("N", nitrogen, res1)
+        topology.addAtom("CA", carbon, res1)
+        topology.addAtom("C", carbon, res1)
 
         indices = cph._findExceptionIndices(system, topology)
 
         # Check residue 0 exceptions
-        assert (0, 'N', 'CA') in indices
-        assert (0, 'CA', 'N') in indices
-        assert indices[(0, 'N', 'CA')] == 0
-        assert (0, 'N', 'C') in indices
+        assert (0, "N", "CA") in indices
+        assert (0, "CA", "N") in indices
+        assert indices[(0, "N", "CA")] == 0
+        assert (0, "N", "C") in indices
 
         # Check residue 1 exceptions
-        assert (1, 'N', 'CA') in indices
-        assert indices[(1, 'N', 'CA')] == 2
-        assert (1, 'CA', 'C') in indices
+        assert (1, "N", "CA") in indices
+        assert indices[(1, "N", "CA")] == 2
+        assert (1, "CA", "C") in indices
 
     def test_find_exception_indices_no_exceptions(self) -> None:
         """Test _findExceptionIndices with no exceptions."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
-        from openmm import System, NonbondedForce
+        from openmm import NonbondedForce, System
         from openmm.app import Topology
         from openmm.app.element import carbon
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -2148,9 +2243,9 @@ class TestFindExceptionIndicesMethod:
 
         topology = Topology()
         chain = topology.addChain()
-        res = topology.addResidue('LIG', chain)
-        topology.addAtom('C1', carbon, res)
-        topology.addAtom('C2', carbon, res)
+        res = topology.addResidue("LIG", chain)
+        topology.addAtom("C1", carbon, res)
+        topology.addAtom("C2", carbon, res)
 
         indices = cph._findExceptionIndices(system, topology)
 
@@ -2161,16 +2256,18 @@ class TestFindExceptionIndicesMethod:
 # Tests for _findInterResidue14 Method
 # ---------------------------------------------------------------------------
 
+
 class TestFindInterResidue14Method:
     """Test suite for _findInterResidue14 method."""
 
     def test_find_inter_residue_14_with_multiple_cross_residue_exceptions(self) -> None:
         """Test _findInterResidue14 with multiple cross-residue exceptions."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
-        from openmm import System, NonbondedForce
+        from openmm import NonbondedForce, System
         from openmm.app import Topology
         from openmm.app.element import carbon, nitrogen
         from openmm.unit import elementary_charge
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -2191,14 +2288,14 @@ class TestFindInterResidue14Method:
 
         topology = Topology()
         chain = topology.addChain()
-        res0 = topology.addResidue('ALA', chain)
-        topology.addAtom('N', nitrogen, res0)
-        topology.addAtom('CA', carbon, res0)
-        topology.addAtom('C', carbon, res0)
-        res1 = topology.addResidue('GLY', chain)
-        topology.addAtom('N', nitrogen, res1)
-        topology.addAtom('CA', carbon, res1)
-        topology.addAtom('C', carbon, res1)
+        res0 = topology.addResidue("ALA", chain)
+        topology.addAtom("N", nitrogen, res0)
+        topology.addAtom("CA", carbon, res0)
+        topology.addAtom("C", carbon, res0)
+        res1 = topology.addResidue("GLY", chain)
+        topology.addAtom("N", nitrogen, res1)
+        topology.addAtom("CA", carbon, res1)
+        topology.addAtom("C", carbon, res1)
 
         indices = cph._findInterResidue14(system, topology)
 
@@ -2212,10 +2309,11 @@ class TestFindInterResidue14Method:
 
     def test_find_inter_residue_14_no_inter_residue(self) -> None:
         """Test _findInterResidue14 when all exceptions are intra-residue."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
-        from openmm import System, NonbondedForce
+        from openmm import NonbondedForce, System
         from openmm.app import Topology
         from openmm.app.element import carbon
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
 
@@ -2233,12 +2331,12 @@ class TestFindInterResidue14Method:
 
         topology = Topology()
         chain = topology.addChain()
-        res0 = topology.addResidue('ALA', chain)
-        topology.addAtom('C1', carbon, res0)
-        topology.addAtom('C2', carbon, res0)
-        res1 = topology.addResidue('GLY', chain)
-        topology.addAtom('C1', carbon, res1)
-        topology.addAtom('C2', carbon, res1)
+        res0 = topology.addResidue("ALA", chain)
+        topology.addAtom("C1", carbon, res0)
+        topology.addAtom("C2", carbon, res0)
+        res1 = topology.addResidue("GLY", chain)
+        topology.addAtom("C1", carbon, res1)
+        topology.addAtom("C2", carbon, res1)
 
         indices = cph._findInterResidue14(system, topology)
 
@@ -2249,6 +2347,7 @@ class TestFindInterResidue14Method:
 # ---------------------------------------------------------------------------
 # Tests for _findNeighbors Method
 # ---------------------------------------------------------------------------
+
 
 class TestFindNeighborsMethod:
     """Test suite for _findNeighbors method."""
@@ -2284,7 +2383,9 @@ class TestFindNeighborsMethod:
         neighbors = cph._findNeighbors(0, positions, mock_periodic_distance)
 
         assert 5 in neighbors  # Within 0.2nm
-        assert 10 not in neighbors  # Residue 10's hydrogens at [1.0, 0, 0] are > 0.2nm away
+        assert (
+            10 not in neighbors
+        )  # Residue 10's hydrogens at [1.0, 0, 0] are > 0.2nm away
 
     def test_find_neighbors_only_returns_higher_indices(self) -> None:
         """Test _findNeighbors only returns residues with higher index."""
@@ -2340,6 +2441,7 @@ class TestFindNeighborsMethod:
 # ---------------------------------------------------------------------------
 # Tests for _attemptPHChange Method
 # ---------------------------------------------------------------------------
+
 
 class TestAttemptPHChangeMethod:
     """Test suite for _attemptPHChange method."""
@@ -2469,18 +2571,21 @@ class TestAttemptPHChangeMethod:
 # Tests for _selectNewState Method
 # ---------------------------------------------------------------------------
 
+
 class TestSelectNewStateMethod:
     """Test suite for _selectNewState method."""
 
     def test_select_new_state_binary_toggle(self) -> None:
         """Test _selectNewState toggles for 2-state systems."""
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, 0),
             ResidueState(0, {}, {}, {}, 1),
@@ -2497,12 +2602,14 @@ class TestSelectNewStateMethod:
     def test_select_new_state_multi_state_random(self) -> None:
         """Test _selectNewState random selection for multi-state systems."""
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
-        titration = ResidueTitration(['HID', 'HIE', 'HIP'], [0.0, 0.5, 4.5])
+        titration = ResidueTitration(["HID", "HIE", "HIP"], [0.0, 0.5, 4.5])
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, 1),
             ResidueState(0, {}, {}, {}, 1),
@@ -2526,19 +2633,22 @@ class TestSelectNewStateMethod:
 # Tests for attemptMCStep Method (Integration-style with Mocks)
 # ---------------------------------------------------------------------------
 
+
 class TestAttemptMCStepMethod:
     """Test suite for attemptMCStep method with comprehensive mocking."""
 
     def test_attempt_mc_step_position_mapping_logic(self) -> None:
         """Test the position mapping logic used in attemptMCStep."""
         # Test the core position mapping logic without calling the full method
-        explicit_positions = np.array([
-            [0.0, 0.0, 0.0],
-            [0.1, 0.0, 0.0],
-            [0.2, 0.0, 0.0],
-            [0.3, 0.0, 0.0],  # water
-            [0.4, 0.0, 0.0],
-        ])
+        explicit_positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0],
+                [0.2, 0.0, 0.0],
+                [0.3, 0.0, 0.0],  # water
+                [0.4, 0.0, 0.0],
+            ]
+        )
 
         implicit_atom_index = np.array([0, 1, 2, 4])  # Skip index 3 (water)
 
@@ -2549,7 +2659,7 @@ class TestAttemptMCStepMethod:
 
     def test_attempt_mc_step_energy_calculation_logic(self) -> None:
         """Test the energy calculation logic in attemptMCStep."""
-        from openmm.unit import kilojoules_per_mole, kelvin, MOLAR_GAS_CONSTANT_R
+        from openmm.unit import MOLAR_GAS_CONSTANT_R, kelvin, kilojoules_per_mole
 
         # Simulate the energy calculation
         current_energy = 100.0 * kilojoules_per_mole
@@ -2563,7 +2673,9 @@ class TestAttemptMCStepMethod:
         # The energy term should be dimensionless after division by kT
         energy_delta = new_energy - current_energy - delta_ref_energy
         # -20 - 5 = -25 kJ/mol
-        assert energy_delta.value_in_unit(kilojoules_per_mole) == pytest.approx(-25.0, rel=0.01)
+        assert energy_delta.value_in_unit(kilojoules_per_mole) == pytest.approx(
+            -25.0, rel=0.01
+        )
 
         # kT at 300K is about 2.494 kJ/mol
         kT_value = kT.value_in_unit(kilojoules_per_mole)
@@ -2594,7 +2706,7 @@ class TestAttemptMCStepMethod:
 
     def test_attempt_mc_step_temperature_handling(self) -> None:
         """Test attemptMCStep handles both numeric and Quantity temperatures."""
-        from openmm.unit import kelvin, is_quantity
+        from openmm.unit import is_quantity, kelvin
 
         # Numeric temperature
         temp_numeric = 300.0
@@ -2617,23 +2729,26 @@ class TestAttemptMCStepMethod:
 # Tests for setResidueState Method
 # ---------------------------------------------------------------------------
 
+
 class TestSetResidueStateMethod:
     """Test suite for setResidueState method."""
 
     def test_set_residue_state_updates_all_contexts(self) -> None:
         """Test setResidueState updates explicit, implicit, and relaxation contexts."""
+
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
-        from openmm.unit import kilojoules_per_mole
 
         cph = object.__new__(ConstantPH)
 
         # Create state
-        state0 = ResidueState(0, {'N': 0}, {0: {'N': (0.1, 0.2, 0.0)}}, {}, 0)
-        state1 = ResidueState(0, {'N': 0}, {0: {'N': (0.2, 0.2, 0.0)}}, {}, 1)
+        state0 = ResidueState(0, {"N": 0}, {0: {"N": (0.1, 0.2, 0.0)}}, {}, 0)
+        state1 = ResidueState(0, {"N": 0}, {0: {"N": (0.2, 0.2, 0.0)}}, {}, 1)
 
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.implicitStates = [state0, state1]
         titration.explicitStates = [state0, state1]
         titration.currentIndex = 0
@@ -2659,7 +2774,7 @@ class TestSetResidueStateMethod:
         def mock_apply(self, state, context, exc_idx, inter14, scale):
             apply_calls.append((state, context))
 
-        with patch.object(ConstantPH, '_applyStateToContext', mock_apply):
+        with patch.object(ConstantPH, "_applyStateToContext", mock_apply):
             cph.setResidueState(0, 1, relax=False)
 
         # Should have called _applyStateToContext 3 times
@@ -2669,15 +2784,17 @@ class TestSetResidueStateMethod:
     def test_set_residue_state_with_relaxation(self) -> None:
         """Test setResidueState triggers relaxation when requested."""
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
-        state0 = ResidueState(0, {'N': 0}, {}, {}, 0)
-        state1 = ResidueState(0, {'N': 0}, {}, {}, 1)
+        state0 = ResidueState(0, {"N": 0}, {}, {}, 0)
+        state1 = ResidueState(0, {"N": 0}, {}, {}, 1)
 
-        titration = ResidueTitration(['ASP', 'ASH'], [0.0, 5.0])
+        titration = ResidueTitration(["ASP", "ASH"], [0.0, 5.0])
         titration.implicitStates = [state0, state1]
         titration.explicitStates = [state0, state1]
         titration.currentIndex = 0
@@ -2715,7 +2832,7 @@ class TestSetResidueStateMethod:
 
         cph.implicitContext = MagicMock()
 
-        with patch.object(ConstantPH, '_applyStateToContext', lambda *args: None):
+        with patch.object(ConstantPH, "_applyStateToContext", lambda *args: None):
             cph.setResidueState(0, 1, relax=True)
 
         # Verify relaxation was performed
@@ -2727,22 +2844,22 @@ class TestSetResidueStateMethod:
 # Tests for _buildImplicitSystemWithParmEd Logic
 # ---------------------------------------------------------------------------
 
+
 class TestBuildImplicitSystemLogic:
     """Test suite for _buildImplicitSystemWithParmEd method logic."""
 
     def test_ion_element_identification(self) -> None:
         """Test ion identification by element number."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         # Simulate the ion element check logic from the method
         ion_elements = [11, 17, 19, 35, 37, 55]  # Na, Cl, K, Br, Rb, Cs
 
         test_cases = [
-            (11, True),   # Na
-            (17, True),   # Cl
-            (6, False),   # C
-            (7, False),   # N
-            (19, True),   # K
+            (11, True),  # Na
+            (17, True),  # Cl
+            (6, False),  # C
+            (7, False),  # N
+            (19, True),  # K
         ]
 
         for element_num, expected in test_cases:
@@ -2752,8 +2869,8 @@ class TestBuildImplicitSystemLogic:
     def test_residue_mapping_construction(self) -> None:
         """Test implicit to explicit residue mapping construction."""
         # Simulate the mapping logic from the method
-        explicit_residue_names = ['ALA', 'HOH', 'GLY', 'NA', 'ASP', 'HOH', 'HOH']
-        water_ion_names = {'HOH', 'NA'}
+        explicit_residue_names = ["ALA", "HOH", "GLY", "NA", "ASP", "HOH", "HOH"]
+        water_ion_names = {"HOH", "NA"}
 
         implicit_to_explicit = []
         explicit_to_implicit = {}
@@ -2774,14 +2891,15 @@ class TestBuildImplicitSystemLogic:
 # Tests for _buildProtonationStates Method Logic
 # ---------------------------------------------------------------------------
 
+
 class TestBuildProtonationStatesLogic:
     """Test suite for _buildProtonationStates method logic."""
 
     def test_variant_index_iteration(self) -> None:
         """Test variant index iteration logic."""
         residue_variants = {
-            10: ['ASP', 'ASH'],
-            15: ['HID', 'HIE', 'HIP'],
+            10: ["ASP", "ASH"],
+            15: ["HID", "HIE", "HIP"],
         }
 
         variant_index = 0
@@ -2795,9 +2913,11 @@ class TestBuildProtonationStatesLogic:
             variant_index += 1
 
         expected = [
-            (10, 'ASP'), (15, 'HID'),  # index 0
-            (10, 'ASH'), (15, 'HIE'),  # index 1
-            (15, 'HIP'),               # index 2
+            (10, "ASP"),
+            (15, "HID"),  # index 0
+            (10, "ASH"),
+            (15, "HIE"),  # index 1
+            (15, "HIP"),  # index 2
         ]
         assert processed_variants == expected
 
@@ -2814,24 +2934,23 @@ class TestBuildProtonationStatesLogic:
 # Tests for Edge Cases and Error Handling
 # ---------------------------------------------------------------------------
 
+
 class TestConstantPHErrorHandling:
     """Test suite for error handling in ConstantPH methods."""
 
     def test_unknown_gb_model_raises_value_error(self) -> None:
         """Test that unknown GB model raises ValueError."""
-        gb_model = 'UnknownModel'
+        gb_model = "UnknownModel"
 
         with pytest.raises(ValueError, match="Unknown GB model"):
-            if gb_model == 'GBn2':
-                pass
-            elif gb_model == 'OBC2':
+            if gb_model == "GBn2" or gb_model == "OBC2":
                 pass
             else:
                 raise ValueError(f"Unknown GB model: {gb_model}. Use 'GBn2' or 'OBC2'.")
 
     def test_missing_nonbonded_force_in_explicit_system(self) -> None:
         """Test error when NonbondedForce is missing."""
-        from openmm import System, HarmonicBondForce, NonbondedForce
+        from openmm import HarmonicBondForce, NonbondedForce, System
 
         system = System()
         system.addParticle(12.0)
@@ -2854,6 +2973,7 @@ class TestConstantPHErrorHandling:
 # Parametrized Tests for Coverage
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "current_index,num_states,expected_options",
     [
@@ -2874,14 +2994,15 @@ class TestSelectNewStateParametrized:
     ) -> None:
         """Test _selectNewState returns valid state different from current."""
         from molecular_simulations.simulate.constantph.constantph import (
-            ConstantPH, ResidueTitration, ResidueState
+            ConstantPH,
+            ResidueState,
+            ResidueTitration,
         )
 
         cph = object.__new__(ConstantPH)
 
         titration = ResidueTitration(
-            [f'S{i}' for i in range(num_states)],
-            [0.0] * num_states
+            [f"S{i}" for i in range(num_states)], [0.0] * num_states
         )
         titration.implicitStates = [
             ResidueState(0, {}, {}, {}, i) for i in range(num_states)
@@ -2948,13 +3069,15 @@ class TestNeighborDistanceThreshold:
 # Tests for _find14Scale Method
 # ---------------------------------------------------------------------------
 
+
 class TestFind14ScaleMethod:
     """Test suite for _find14Scale method."""
 
     def test_find_14_scale_from_system_returns_amber_default(self) -> None:
         """Test _find14Scale returns AMBER default for System objects."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from openmm import System
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         cph = object.__new__(ConstantPH)
         system = System()
@@ -2986,24 +3109,27 @@ class TestFind14ScaleMethod:
 # Tests for Position Mapping Logic
 # ---------------------------------------------------------------------------
 
+
 class TestPositionMappingLogic:
     """Test suite for position mapping between explicit and implicit systems."""
 
     def test_position_mapping_with_numpy_indexing(self) -> None:
         """Test position mapping using numpy array indexing."""
         # Explicit system positions (10 atoms)
-        explicit_positions = np.array([
-            [0.0, 0.0, 0.0],  # 0
-            [0.1, 0.0, 0.0],  # 1
-            [0.2, 0.0, 0.0],  # 2
-            [0.3, 0.0, 0.0],  # 3 - water O
-            [0.35, 0.0, 0.0], # 4 - water H
-            [0.4, 0.0, 0.0],  # 5 - water H
-            [0.5, 0.0, 0.0],  # 6
-            [0.6, 0.0, 0.0],  # 7 - ion
-            [0.7, 0.0, 0.0],  # 8
-            [0.8, 0.0, 0.0],  # 9
-        ])
+        explicit_positions = np.array(
+            [
+                [0.0, 0.0, 0.0],  # 0
+                [0.1, 0.0, 0.0],  # 1
+                [0.2, 0.0, 0.0],  # 2
+                [0.3, 0.0, 0.0],  # 3 - water O
+                [0.35, 0.0, 0.0],  # 4 - water H
+                [0.4, 0.0, 0.0],  # 5 - water H
+                [0.5, 0.0, 0.0],  # 6
+                [0.6, 0.0, 0.0],  # 7 - ion
+                [0.7, 0.0, 0.0],  # 8
+                [0.8, 0.0, 0.0],  # 9
+            ]
+        )
 
         # Implicit atom index mapping (excluding water indices 3,4,5 and ion 7)
         implicit_atom_index = np.array([0, 1, 2, 6, 8, 9])
@@ -3020,6 +3146,7 @@ class TestPositionMappingLogic:
 # ---------------------------------------------------------------------------
 # Tests for Metropolis Criterion
 # ---------------------------------------------------------------------------
+
 
 class TestMetropolisCriterion:
     """Test suite for Metropolis acceptance criterion logic."""
@@ -3054,7 +3181,7 @@ class TestMetropolisCriterion:
     def test_metropolis_with_proton_contribution(self) -> None:
         """Test Metropolis criterion with proton number contribution."""
         import numpy as np
-        from openmm.unit import kelvin, kilojoules_per_mole, MOLAR_GAS_CONSTANT_R
+        from openmm.unit import MOLAR_GAS_CONSTANT_R, kelvin, kilojoules_per_mole
 
         temperature = 300.0 * kelvin
         kT = MOLAR_GAS_CONSTANT_R * temperature
@@ -3075,6 +3202,7 @@ class TestMetropolisCriterion:
 # ---------------------------------------------------------------------------
 # Tests for Histogram and Weight Updates
 # ---------------------------------------------------------------------------
+
 
 class TestHistogramWeightUpdates:
     """Test suite for Wang-Landau histogram and weight update logic."""
@@ -3118,9 +3246,11 @@ class TestHistogramWeightUpdates:
         current_probability = 0.999
         weight_update_factor = 1.0
 
-        if (not has_made_transition and
-            current_probability > 0.99 and
-            weight_update_factor < 1024.0):
+        if (
+            not has_made_transition
+            and current_probability > 0.99
+            and weight_update_factor < 1024.0
+        ):
             weight_update_factor *= 2.0
 
         assert weight_update_factor == 2.0
@@ -3131,9 +3261,11 @@ class TestHistogramWeightUpdates:
         current_probability = 0.999
         weight_update_factor = 1024.0
 
-        if (not has_made_transition and
-            current_probability > 0.99 and
-            weight_update_factor < 1024.0):
+        if (
+            not has_made_transition
+            and current_probability > 0.99
+            and weight_update_factor < 1024.0
+        ):
             weight_update_factor *= 2.0
 
         # Should not double because already at cap
@@ -3144,14 +3276,13 @@ class TestHistogramWeightUpdates:
 # Tests for _findResidueStates Method Logic
 # ---------------------------------------------------------------------------
 
+
 class TestFindResidueStatesMethod:
     """Test suite for _findResidueStates method logic."""
 
     def test_find_residue_states_particle_params_extraction(self) -> None:
         """Test particle parameters extraction logic."""
-        from openmm import System, NonbondedForce
-        from openmm.app import Topology
-        from openmm.app.element import nitrogen, carbon
+        from openmm import NonbondedForce, System
         from openmm.unit import elementary_charge
 
         # Create system
@@ -3180,8 +3311,7 @@ class TestFindResidueStatesMethod:
 
     def test_find_residue_states_exception_extraction(self) -> None:
         """Test exception parameters extraction logic."""
-        from openmm import System, NonbondedForce
-        from openmm.unit import elementary_charge
+        from openmm import NonbondedForce, System
 
         system = System()
         system.addParticle(14.0)
@@ -3211,40 +3341,38 @@ class TestFindResidueStatesMethod:
 # Tests for _mapStatesToExplicitSystem Logic
 # ---------------------------------------------------------------------------
 
+
 class TestMapStatesToExplicitSystemLogic:
     """Test suite for _mapStatesToExplicitSystem method logic."""
 
     def test_explicit_atom_indices_extraction(self) -> None:
         """Test extraction of atom indices from explicit topology residue."""
         from openmm.app import Topology
-        from openmm.app.element import nitrogen, carbon, hydrogen
+        from openmm.app.element import carbon, hydrogen, nitrogen
 
         topology = Topology()
         chain = topology.addChain()
-        residue = topology.addResidue('ALA', chain)
-        topology.addAtom('N', nitrogen, residue)
-        topology.addAtom('CA', carbon, residue)
-        topology.addAtom('H', hydrogen, residue)
+        residue = topology.addResidue("ALA", chain)
+        topology.addAtom("N", nitrogen, residue)
+        topology.addAtom("CA", carbon, residue)
+        topology.addAtom("H", hydrogen, residue)
 
         residues = list(topology.residues())
-        explicit_atom_indices = {
-            atom.name: atom.index
-            for atom in residues[0].atoms()
-        }
+        explicit_atom_indices = {atom.name: atom.index for atom in residues[0].atoms()}
 
-        assert explicit_atom_indices == {'N': 0, 'CA': 1, 'H': 2}
+        assert explicit_atom_indices == {"N": 0, "CA": 1, "H": 2}
 
     def test_hydrogen_tracking_for_multisite(self) -> None:
         """Test tracking of hydrogen indices for multi-site titration."""
         from openmm.app import Topology
-        from openmm.app.element import nitrogen, carbon, hydrogen
+        from openmm.app.element import carbon, hydrogen, nitrogen
 
         topology = Topology()
         chain = topology.addChain()
-        residue = topology.addResidue('ASH', chain)
-        topology.addAtom('N', nitrogen, residue)
-        topology.addAtom('CA', carbon, residue)
-        topology.addAtom('HD2', hydrogen, residue)  # Titratable H
+        residue = topology.addResidue("ASH", chain)
+        topology.addAtom("N", nitrogen, residue)
+        topology.addAtom("CA", carbon, residue)
+        topology.addAtom("HD2", hydrogen, residue)  # Titratable H
 
         residues = list(topology.residues())
 
@@ -3261,6 +3389,7 @@ class TestMapStatesToExplicitSystemLogic:
 # Tests for _buildExplicitSystem Logic
 # ---------------------------------------------------------------------------
 
+
 class TestBuildExplicitSystemLogic:
     """Test suite for _buildExplicitSystem method logic."""
 
@@ -3273,7 +3402,7 @@ class TestBuildExplicitSystemLogic:
         system.addParticle(14.0)  # N (protein)
         system.addParticle(12.0)  # C (protein)
         system.addParticle(18.0)  # O (water)
-        system.addParticle(1.0)   # H (water)
+        system.addParticle(1.0)  # H (water)
 
         # Zero protein masses (indices 0, 1)
         protein_indices = [0, 1]
@@ -3289,10 +3418,11 @@ class TestBuildExplicitSystemLogic:
         """Test water residue identification logic."""
         from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
-        residue_names = ['ALA', 'HOH', 'WAT', 'GLY', 'TIP3', 'OPC']
+        residue_names = ["ALA", "HOH", "WAT", "GLY", "TIP3", "OPC"]
 
         water_indices = [
-            i for i, name in enumerate(residue_names)
+            i
+            for i, name in enumerate(residue_names)
             if name in ConstantPH.WATER_ION_NAMES
         ]
 
@@ -3300,8 +3430,9 @@ class TestBuildExplicitSystemLogic:
 
     def test_ion_element_identification(self) -> None:
         """Test ion identification by element."""
-        from molecular_simulations.simulate.constantph.constantph import ConstantPH
         from openmm.app import element
+
+        from molecular_simulations.simulate.constantph.constantph import ConstantPH
 
         test_elements = [
             element.sodium,
@@ -3322,6 +3453,7 @@ class TestBuildExplicitSystemLogic:
 # ---------------------------------------------------------------------------
 # Tests for attemptMCStep Logic Components
 # ---------------------------------------------------------------------------
+
 
 class TestAttemptMCStepLogicComponents:
     """Test suite for individual logic components in attemptMCStep."""
@@ -3345,7 +3477,6 @@ class TestAttemptMCStepLogicComponents:
 
     def test_delta_n_hydrogens_sum(self) -> None:
         """Test hydrogen count difference calculation."""
-        from openmm.unit import sum as unitsum
 
         # State 0: 0 hydrogens (ASP)
         # State 1: 1 hydrogen (ASH)
@@ -3363,7 +3494,7 @@ class TestAttemptMCStepLogicComponents:
     def test_acceptance_criterion_components(self) -> None:
         """Test individual components of acceptance criterion."""
         import numpy as np
-        from openmm.unit import kilojoules_per_mole, kelvin, MOLAR_GAS_CONSTANT_R
+        from openmm.unit import MOLAR_GAS_CONSTANT_R, kelvin, kilojoules_per_mole
 
         # Setup
         temperature = 300.0 * kelvin
@@ -3389,6 +3520,7 @@ class TestAttemptMCStepLogicComponents:
 # ---------------------------------------------------------------------------
 # Tests for Relaxation Logic
 # ---------------------------------------------------------------------------
+
 
 class TestRelaxationLogic:
     """Test suite for relaxation logic after state changes."""
@@ -3422,16 +3554,17 @@ class TestRelaxationLogic:
 # Tests for _buildAtomIndexMapping Logic
 # ---------------------------------------------------------------------------
 
+
 class TestBuildAtomIndexMappingLogic:
     """Test suite for _buildAtomIndexMapping method logic."""
 
     def test_atom_name_matching_logic(self) -> None:
         """Test atom name matching between implicit and explicit systems."""
         # Explicit atoms
-        explicit_atoms = {'N': 0, 'CA': 1, 'C': 2, 'O': 3, 'CB': 4}
+        explicit_atoms = {"N": 0, "CA": 1, "C": 2, "O": 3, "CB": 4}
 
         # Implicit atoms (after stripping water)
-        implicit_atoms = ['N', 'CA', 'C', 'O', 'CB']
+        implicit_atoms = ["N", "CA", "C", "O", "CB"]
 
         # Map implicit to explicit
         mapping = []
@@ -3460,6 +3593,7 @@ class TestBuildAtomIndexMappingLogic:
 # Tests for Multi-site Titration Logic
 # ---------------------------------------------------------------------------
 
+
 class TestMultiSiteTitrationLogic:
     """Test suite for multi-site (coupled) titration logic."""
 
@@ -3484,17 +3618,18 @@ class TestMultiSiteTitrationLogic:
 
     def test_titration_list_handling(self) -> None:
         """Test handling of multiple titrations for coupled moves."""
-        from molecular_simulations.simulate.constantph.constantph import ResidueTitration
+        from molecular_simulations.simulate.constantph.constantph import (
+            ResidueTitration,
+        )
 
         titrations = [
-            ResidueTitration(['ASP', 'ASH'], [0.0, 5.2]),
-            ResidueTitration(['GLU', 'GLH'], [0.0, 4.8]),
+            ResidueTitration(["ASP", "ASH"], [0.0, 5.2]),
+            ResidueTitration(["GLU", "GLH"], [0.0, 4.8]),
         ]
 
         # Process multiple titrations
         total_ref_delta = sum(
-            t.referenceEnergies[1] - t.referenceEnergies[0]
-            for t in titrations
+            t.referenceEnergies[1] - t.referenceEnergies[0] for t in titrations
         )
 
         assert total_ref_delta == pytest.approx(10.0)
@@ -3504,13 +3639,14 @@ class TestMultiSiteTitrationLogic:
 # Tests for Context Parameter Updates
 # ---------------------------------------------------------------------------
 
+
 class TestContextParameterUpdates:
     """Test suite for context parameter update logic."""
 
     def test_force_update_in_context(self) -> None:
         """Test logic for updating forces in context."""
-        from openmm import System, NonbondedForce, Context, VerletIntegrator
-        from openmm.unit import femtoseconds, elementary_charge
+        from openmm import Context, NonbondedForce, System, VerletIntegrator
+        from openmm.unit import femtoseconds
 
         system = System()
         system.addParticle(14.0)
@@ -3536,7 +3672,7 @@ class TestContextParameterUpdates:
 
     def test_reinitialize_preserve_state(self) -> None:
         """Test context reinitialization with preserveState."""
-        from openmm import System, NonbondedForce, Context, VerletIntegrator
+        from openmm import Context, NonbondedForce, System, VerletIntegrator
         from openmm.unit import femtoseconds, nanometers
 
         system = System()
@@ -3562,6 +3698,7 @@ class TestContextParameterUpdates:
 # Additional Parametrized Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "num_hydrogens_list,expected_protonated_idx",
     [
@@ -3586,11 +3723,11 @@ class TestProtonatedIndexParametrized:
 @pytest.mark.parametrize(
     "delta_energy_kj,delta_n,ph,expected_favorable",
     [
-        (-50.0, 0, 7.0, True),    # Large favorable energy, no proton change
-        (50.0, 0, 7.0, False),    # Large unfavorable energy
-        (-10.0, 1, 7.0, False),   # Energy favorable but proton term unfavorable
-        (-25.0, 1, 4.0, True),    # Energy favorable, low pH helps protonation
-        (0.0, -1, 7.0, True),     # No energy change, deprotonation at pH 7 favorable
+        (-50.0, 0, 7.0, True),  # Large favorable energy, no proton change
+        (50.0, 0, 7.0, False),  # Large unfavorable energy
+        (-10.0, 1, 7.0, False),  # Energy favorable but proton term unfavorable
+        (-25.0, 1, 4.0, True),  # Energy favorable, low pH helps protonation
+        (0.0, -1, 7.0, True),  # No energy change, deprotonation at pH 7 favorable
     ],
 )
 class TestAcceptanceCriterionParametrized:
@@ -3600,7 +3737,7 @@ class TestAcceptanceCriterionParametrized:
         self, delta_energy_kj: float, delta_n: int, ph: float, expected_favorable: bool
     ) -> None:
         """Test whether moves are favorable based on energy and proton changes."""
-        from openmm.unit import kilojoules_per_mole, kelvin, MOLAR_GAS_CONSTANT_R
+        from openmm.unit import MOLAR_GAS_CONSTANT_R, kelvin, kilojoules_per_mole
 
         temperature = 300.0 * kelvin
         kT = MOLAR_GAS_CONSTANT_R * temperature

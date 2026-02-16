@@ -1,3 +1,4 @@
+# ruff: noqa: B006, SIM115
 """OpenMM molecular dynamics simulation module.
 
 This module provides classes for running molecular dynamics simulations using
@@ -11,8 +12,11 @@ Classes:
     Minimizer: Simple energy minimization utility.
 """
 
-from copy import deepcopy
 import logging
+import os
+from copy import deepcopy
+from pathlib import Path
+
 import MDAnalysis as mda
 import numpy as np
 from openmm import (
@@ -21,16 +25,16 @@ from openmm import (
     LangevinMiddleIntegrator,
     MonteCarloBarostat,
     MonteCarloMembraneBarostat,
-    Platform, 
-    System
+    Platform,
+    System,
 )
 from openmm.app import (
-    AmberInpcrdFile, 
+    PME,
+    AmberInpcrdFile,
     AmberPrmtopFile,
     CharmmParameterSet,
     CharmmPsfFile,
     CheckpointReporter,
-    CutoffNonPeriodic,
     DCDReporter,
     ForceField,
     GBn2,
@@ -39,29 +43,24 @@ from openmm.app import (
     HBonds,
     NoCutoff,
     PDBFile,
-    PME,
     Simulation,
     StateDataReporter,
-    Topology
 )
+from openmm.app.internal.singleton import Singleton
 from openmm.unit import (
     amu,
-    angstroms, 
+    angstroms,
     bar,
-    kelvin, 
-    kilocalories_per_mole, 
-    nanometer, 
-    nanometers, 
+    kelvin,
+    kilocalories_per_mole,
+    nanometer,
+    nanometers,
     picosecond,
     picoseconds,
 )
-from openmm.app.internal.singleton import Singleton
-import os
-from pathlib import Path
-from typing import Optional, Union
 
-PathLike = Union[Path, str]
-OptPath = Union[Path, str, None]
+PathLike = Path | str
+OptPath = Path | str | None
 
 logger = logging.getLogger(__name__)
 
@@ -117,44 +116,51 @@ class Simulator:
         ...     path='./simulation',
         ...     equil_steps=500_000,
         ...     prod_steps=50_000_000,
-        ...     device_ids=[0, 1]
+        ...     device_ids=[0, 1],
         ... )
         >>> sim.run()
     """
 
-    def __init__(self,
-                 path: PathLike,
-                 top_name: Optional[str] = None,
-                 coor_name: Optional[str] = None,
-                 out_path: Optional[Path] = None,
-                 ff: str = 'amber',
-                 heat_steps: int = 100_000,
-                 equil_steps: int = 1_250_000,
-                 prod_steps: int = 250_000_000,
-                 prod_dt_in_ps: float = 0.004,
-                 hydrogen_mass_repartitioning: float = 1.5,
-                 n_equil_cycles: int = 3,
-                 temperature: float = 300.,
-                 eq_reporter_frequency: int = 1_000,
-                 prod_reporter_frequency: int = 10_000,
-                 platform: str = 'CUDA',
-                 device_ids: list[int] = [0],
-                 force_constant: float = 10.,
-                 params: Optional[str] = None,
-                 membrane: bool = False):
+    def __init__(
+        self,
+        path: PathLike,
+        top_name: str | None = None,
+        coor_name: str | None = None,
+        out_path: Path | None = None,
+        ff: str = 'amber',
+        heat_steps: int = 100_000,
+        equil_steps: int = 1_250_000,
+        prod_steps: int = 250_000_000,
+        prod_dt_in_ps: float = 0.004,
+        hydrogen_mass_repartitioning: float = 1.5,
+        n_equil_cycles: int = 3,
+        temperature: float = 300.0,
+        eq_reporter_frequency: int = 1_000,
+        prod_reporter_frequency: int = 10_000,
+        platform: str = 'CUDA',
+        device_ids: list[int] = [0],
+        force_constant: float = 10.0,
+        params: str | None = None,
+        membrane: bool = False,
+    ):
         self.path = Path(path)  # enforce path object
-        self.top_file = self.path / top_name if top_name is not None else self.path / 'system.prmtop'
-        self.coor_file = self.path / coor_name if coor_name is not None else self.path / 'system.inpcrd'
+        self.top_file = (
+            self.path / top_name
+            if top_name is not None
+            else self.path / 'system.prmtop'
+        )
+        self.coor_file = (
+            self.path / coor_name
+            if coor_name is not None
+            else self.path / 'system.inpcrd'
+        )
         self.temperature = temperature
 
         self.ff = ff.lower()
         self.params = params  # for charmm parameter sets
         self.setup_barostat(membrane)
 
-        if out_path is not None:
-            p = Path(out_path)
-        else:
-            p = self.path
+        p = Path(out_path) if out_path is not None else self.path
 
         # make sure path exists
         p.mkdir(exist_ok=True, parents=True)
@@ -195,8 +201,7 @@ class Simulator:
             else:
                 device_index = ','.join([str(x) for x in device_ids])
 
-            self.properties = {'DeviceIndex': device_index,
-                               'Precision': 'mixed'}
+            self.properties = {'DeviceIndex': device_index, 'Precision': 'mixed'}
 
         elif platform == 'OpenCL':
             if device_id := os.environ.get('ZE_AFFINITY_MASK', False):
@@ -208,7 +213,7 @@ class Simulator:
                 device_index = ','.join([str(x) for x in device_ids])
 
             self.properties = {'Precision': 'mixed'}
-            #self.properties = {'DeviceIndex': device_index,
+            # self.properties = {'DeviceIndex': device_index,
             #                   'Precision': 'mixed',
             #                   'OpenCLPlatformIndex': '1'}
         else:
@@ -230,17 +235,17 @@ class Simulator:
 
         if is_membrane_system:
             self.barostat = MonteCarloMembraneBarostat
-            self.barostat_args.update({
-                'defaultSurfaceTension': 0 * bar * nanometer,
-                'defaultTemperature': self.temperature * kelvin,
-                'xymode': MonteCarloMembraneBarostat.XYIsotropic,
-                'zmode': MonteCarloMembraneBarostat.ZFree
-            })
+            self.barostat_args.update(
+                {
+                    'defaultSurfaceTension': 0 * bar * nanometer,
+                    'defaultTemperature': self.temperature * kelvin,
+                    'xymode': MonteCarloMembraneBarostat.XYIsotropic,
+                    'zmode': MonteCarloMembraneBarostat.ZFree,
+                }
+            )
         else:
             self.barostat = MonteCarloBarostat
-            self.barostat_args.update({
-                'temperature': self.temperature * kelvin
-            })
+            self.barostat_args.update({'temperature': self.temperature * kelvin})
 
     def load_system(self) -> System:
         """Load the molecular system based on force field type.
@@ -259,7 +264,9 @@ class Simulator:
         elif self.ff == 'charmm':
             system = self.load_charmm_files()
         else:
-            raise AttributeError(f'self.ff must be a valid MD forcefield [amber, charmm]!')
+            raise AttributeError(
+                'self.ff must be a valid MD forcefield [amber, charmm]!'
+            )
 
         if not hasattr(self, 'indices'):
             self.indices = self.get_restraint_indices()
@@ -277,14 +284,17 @@ class Simulator:
         """
         if not hasattr(self, 'coordinate'):
             self.coordinate = AmberInpcrdFile(str(self.coor_file))
-            self.topology = AmberPrmtopFile(str(self.top_file),
-                                            periodicBoxVectors=self.coordinate.boxVectors)
+            self.topology = AmberPrmtopFile(
+                str(self.top_file), periodicBoxVectors=self.coordinate.boxVectors
+            )
 
-        system = self.topology.createSystem(nonbondedMethod=PME,
-                                            removeCMMotion=False,
-                                            nonbondedCutoff=1. * nanometer,
-                                            constraints=HBonds,
-                                            hydrogenMass=1.5 * amu)
+        system = self.topology.createSystem(
+            nonbondedMethod=PME,
+            removeCMMotion=False,
+            nonbondedCutoff=1.0 * nanometer,
+            constraints=HBonds,
+            hydrogenMass=1.5 * amu,
+        )
 
         return system
 
@@ -298,28 +308,32 @@ class Simulator:
         """
         if not hasattr(self, 'coordinate'):
             self.coordinate = PDBFile(str(self.coor_file))
-            self.topology = CharmmPsfFile(str(self.top_file),
-                                          periodicBoxVectors=self.coordinate.topology.getPeriodicBoxVectors())
+            self.topology = CharmmPsfFile(
+                str(self.top_file),
+                periodicBoxVectors=self.coordinate.topology.getPeriodicBoxVectors(),
+            )
         if not hasattr(self, 'parameter_set') and self.params is not None:
             self.parameter_set = CharmmParameterSet(*self.params)
 
         if self.params is None:
             self.forcefield = ForceField('charmm36_2024.xml', 'charmm36/water.xml')
-            system = self.forcefield.createSystem(self.coordinate.topology,
-                                                  nonbondedMethod=PME,
-                                                  nonbondedCutoff=1.2 * nanometer,
-                                                  constraints=HBonds)
+            system = self.forcefield.createSystem(
+                self.coordinate.topology,
+                nonbondedMethod=PME,
+                nonbondedCutoff=1.2 * nanometer,
+                constraints=HBonds,
+            )
         else:
-            system = self.topology.createSystem(self.parameter_set,
-                                                nonbondedMethod=PME,
-                                                nonbondedCutoff=1.2 * nanometer,
-                                                constraints=HBonds)
+            system = self.topology.createSystem(
+                self.parameter_set,
+                nonbondedMethod=PME,
+                nonbondedCutoff=1.2 * nanometer,
+                constraints=HBonds,
+            )
 
         return system
 
-    def setup_sim(self,
-                  system: System,
-                  dt: float) -> tuple[Simulation, Integrator]:
+    def setup_sim(self, system: System, dt: float) -> tuple[Simulation, Integrator]:
         """Build OpenMM Simulation and Integrator objects.
 
         Creates a LangevinMiddleIntegrator with the specified timestep and
@@ -332,14 +346,16 @@ class Simulator:
         Returns:
             Tuple containing (Simulation, Integrator) objects.
         """
-        integrator = LangevinMiddleIntegrator(self.temperature * kelvin,
-                                              1 / picosecond,
-                                              dt * picoseconds)
-        simulation = Simulation(self.topology.topology,
-                                system,
-                                integrator,
-                                platform=self.platform,
-                                platformProperties=self.properties)
+        integrator = LangevinMiddleIntegrator(
+            self.temperature * kelvin, 1 / picosecond, dt * picoseconds
+        )
+        simulation = Simulation(
+            self.topology.topology,
+            system,
+            integrator,
+            platform=self.platform,
+            platformProperties=self.properties,
+        )
 
         return simulation, integrator
 
@@ -353,22 +369,21 @@ class Simulator:
         # Store original total for progress reporting
         self.total_prod_steps = self.prod_steps
 
-        skip_eq = all([f.exists()
-                       for f in [self.eq_state, self.eq_chkpt, self.eq_log]])
+        skip_eq = all([f.exists() for f in [self.eq_state, self.eq_chkpt, self.eq_log]])
         if not skip_eq:
             logger.info('No restart detected, will begin equilibration.')
             self.equilibrate()
-            logger.info(f'Equilibration finished, running {self.prod_steps} steps of production MD.')
+            logger.info(
+                f'Equilibration finished, running {self.prod_steps} steps of production MD.'
+            )
 
         if self.restart.exists():
             logger.info('Checkpoint file detected, resuming simulation.')
             self.check_num_steps_left()
             logger.info(f'Will run {self.prod_steps} steps of production MD.')
-            self.production(chkpt=str(self.restart),
-                            restart=True)
+            self.production(chkpt=str(self.restart), restart=True)
         else:
-            self.production(chkpt=str(self.eq_chkpt),
-                            restart=False)
+            self.production(chkpt=str(self.eq_chkpt), restart=False)
 
         logger.info('Production MD run complete.')
 
@@ -382,23 +397,29 @@ class Simulator:
             Equilibrated OpenMM Simulation object.
         """
         system = self.load_system()
-        system = self.add_backbone_posres(system,
-                                          self.coordinate.positions,
-                                          self.topology.topology.atoms(),
-                                          self.indices,
-                                          self.k)
+        system = self.add_backbone_posres(
+            system,
+            self.coordinate.positions,
+            self.topology.topology.atoms(),
+            self.indices,
+            self.k,
+        )
 
         simulation, integrator = self.setup_sim(system, dt=0.002)
 
         simulation.context.setPositions(self.coordinate.positions)
         simulation.minimizeEnergy()
 
-        simulation.reporters.append(StateDataReporter(str(self.eq_log),
-                                                      self.eq_freq,
-                                                      step=True,
-                                                      potentialEnergy=True,
-                                                      speed=True,
-                                                      temperature=True))
+        simulation.reporters.append(
+            StateDataReporter(
+                str(self.eq_log),
+                self.eq_freq,
+                step=True,
+                potentialEnergy=True,
+                speed=True,
+                temperature=True,
+            )
+        )
         simulation.reporters.append(DCDReporter(str(self.eq_dcd), self.eq_freq))
 
         simulation, integrator = self._heating(simulation, integrator)
@@ -406,9 +427,7 @@ class Simulator:
 
         return simulation
 
-    def production(self,
-                   chkpt: PathLike,
-                   restart: bool = False) -> None:
+    def production(self, chkpt: PathLike, restart: bool = False) -> None:
         """Run production molecular dynamics.
 
         Loads a new system with barostat, loads checkpoint, attaches reporters,
@@ -425,23 +444,18 @@ class Simulator:
         system.addForce(self.barostat(*self.barostat_args.values()))
         simulation.context.reinitialize(True)
 
-        if restart:
-            log_file = open(str(self.prod_log), 'a')
-        else:
-            log_file = str(self.prod_log)
+        log_file = open(self.prod_log, 'a') if restart else str(self.prod_log)
 
         simulation = self.load_checkpoint(simulation, chkpt)
-        simulation = self.attach_reporters(simulation,
-                                           self.dcd,
-                                           log_file,
-                                           str(self.restart),
-                                           restart=restart)
+        simulation = self.attach_reporters(
+            simulation, self.dcd, log_file, str(self.restart), restart=restart
+        )
 
         self.simulation = self._production(simulation)  # save simulation object
 
-    def load_checkpoint(self,
-                        simulation: Simulation,
-                        checkpoint: PathLike) -> Simulation:
+    def load_checkpoint(
+        self, simulation: Simulation, checkpoint: PathLike
+    ) -> Simulation:
         """Load a checkpoint into the simulation.
 
         Args:
@@ -454,12 +468,14 @@ class Simulator:
         simulation.loadCheckpoint(checkpoint)
         return simulation
 
-    def attach_reporters(self,
-                         simulation: Simulation,
-                         dcd_file: PathLike,
-                         log_file: PathLike,
-                         rst_file: PathLike,
-                         restart: bool = False) -> Simulation:
+    def attach_reporters(
+        self,
+        simulation: Simulation,
+        dcd_file: PathLike,
+        log_file: PathLike,
+        rst_file: PathLike,
+        restart: bool = False,
+    ) -> Simulation:
         """Attach trajectory, logging, and checkpoint reporters.
 
         Args:
@@ -476,36 +492,31 @@ class Simulator:
         # otherwise fall back to prod_steps for direct production() calls
         total_steps = getattr(self, 'total_prod_steps', self.prod_steps)
 
-        simulation.reporters.extend([
-            DCDReporter(
-                dcd_file,
-                self.prod_freq,
-                append=restart
-            ),
-            StateDataReporter(
-                log_file,
-                self.prod_freq,
-                step=True,
-                potentialEnergy=True,
-                temperature=True,
-                progress=True,
-                remainingTime=True,
-                speed=True,
-                volume=True,
-                totalSteps=total_steps,
-                separator='\t'
-            ),
-            CheckpointReporter(
-                rst_file,
-                self.prod_freq * 10
-            )
-        ])
+        simulation.reporters.extend(
+            [
+                DCDReporter(dcd_file, self.prod_freq, append=restart),
+                StateDataReporter(
+                    log_file,
+                    self.prod_freq,
+                    step=True,
+                    potentialEnergy=True,
+                    temperature=True,
+                    progress=True,
+                    remainingTime=True,
+                    speed=True,
+                    volume=True,
+                    totalSteps=total_steps,
+                    separator='\t',
+                ),
+                CheckpointReporter(rst_file, self.prod_freq * 10),
+            ]
+        )
 
         return simulation
 
-    def _heating(self,
-                 simulation: Simulation,
-                 integrator: Integrator) -> tuple[Simulation, Integrator]:
+    def _heating(
+        self, simulation: Simulation, integrator: Integrator
+    ) -> tuple[Simulation, Integrator]:
         """Perform slow heating protocol.
 
         Gradually heats the system from 5K to the target temperature over
@@ -559,7 +570,9 @@ class Simulator:
         for i in range(n_levels):
             simulation.step(eq_steps)
             k = float(self.k - (i * d_k))
-            simulation.context.setParameter('k', (k * kilocalories_per_mole / angstroms ** 2))
+            simulation.context.setParameter(
+                'k', (k * kilocalories_per_mole / angstroms**2)
+            )
 
         simulation.context.setParameter('k', 0)
         simulation.step(eq_steps)
@@ -626,7 +639,10 @@ class Simulator:
             try:
                 last_line = prod_log[-2]
                 last_step = int(last_line.split()[1].strip())
-            except (IndexError, ValueError):  # something weird happened just run full time
+            except (
+                IndexError,
+                ValueError,
+            ):  # something weird happened just run full time
                 return
 
         # Calculate steps remaining from the checkpoint position
@@ -651,17 +667,19 @@ class Simulator:
                     mode = 'a'
                 else:
                     mode = 'w'
-                    lines = ['first_frame,last_frame'] + lines
+                    lines = ['first_frame,last_frame', *lines]
 
                 with open(str(duplicate_log), mode) as fout:
                     fout.write('\n'.join(lines))
 
     @staticmethod
-    def add_backbone_posres(system: System,
-                            positions: np.ndarray,
-                            atoms: list,
-                            indices: list[int],
-                            restraint_force: float = 10.) -> System:
+    def add_backbone_posres(
+        system: System,
+        positions: np.ndarray,
+        atoms: list,
+        indices: list[int],
+        restraint_force: float = 10.0,
+    ) -> System:
         """Add harmonic position restraints to selected atoms.
 
         Args:
@@ -674,15 +692,15 @@ class Simulator:
         Returns:
             Copy of System with harmonic restraints added.
         """
-        force = CustomExternalForce("k*periodicdistance(x, y, z, x0, y0, z0)^2")
+        force = CustomExternalForce('k*periodicdistance(x, y, z, x0, y0, z0)^2')
 
-        force_amount = restraint_force * kilocalories_per_mole / angstroms ** 2
-        force.addGlobalParameter("k", force_amount)
-        force.addPerParticleParameter("x0")
-        force.addPerParticleParameter("y0")
-        force.addPerParticleParameter("z0")
+        force_amount = restraint_force * kilocalories_per_mole / angstroms**2
+        force.addGlobalParameter('k', force_amount)
+        force.addPerParticleParameter('x0')
+        force.addPerParticleParameter('y0')
+        force.addPerParticleParameter('z0')
 
-        for i, (atom_crd, atom) in enumerate(zip(positions, atoms)):
+        for i, (atom_crd, atom) in enumerate(zip(positions, atoms, strict=True)):
             if atom.index in indices:
                 force.addParticle(i, atom_crd.value_in_unit(nanometers))
 
@@ -721,48 +739,54 @@ class ImplicitSimulator(Simulator):
 
     Example:
         >>> sim = ImplicitSimulator(
-        ...     path='./simulation',
-        ...     implicit_solvent=GBn2,
-        ...     prod_steps=100_000_000
+        ...     path='./simulation', implicit_solvent=GBn2, prod_steps=100_000_000
         ... )
         >>> sim.run()
     """
 
-    def __init__(self,
-                 path: str,
-                 top_name: Optional[str] = None,
-                 coor_name: Optional[str] = None,
-                 out_path: Optional[Path] = None,
-                 ff: str = 'amber',
-                 equil_steps: int = 1_250_000,
-                 prod_steps: int = 250_000_000,
-                 n_equil_cycles: int = 3,
-                 temperature: float = 300.,
-                 eq_reporter_frequency: int = 1_000,
-                 prod_reporter_frequency: int = 10_000,
-                 platform: str = 'CUDA',
-                 device_ids: list[int] = [0],
-                 force_constant: float = 10.,
-                 implicit_solvent: Singleton = GBn2,
-                 solute_dielectric: float = 1.,
-                 solvent_dielectric: float = 78.5,
-                 **kwargs):
-        super().__init__(path=path, top_name=top_name,
-                         coor_name=coor_name, out_path=out_path,
-                         ff=ff, equil_steps=equil_steps,
-                         prod_steps=prod_steps,
-                         n_equil_cycles=n_equil_cycles,
-                         temperature=temperature,
-                         eq_reporter_frequency=eq_reporter_frequency,
-                         prod_reporter_frequency=prod_reporter_frequency,
-                         platform=platform, device_ids=device_ids,
-                         force_constant=force_constant)
+    def __init__(
+        self,
+        path: str,
+        top_name: str | None = None,
+        coor_name: str | None = None,
+        out_path: Path | None = None,
+        ff: str = 'amber',
+        equil_steps: int = 1_250_000,
+        prod_steps: int = 250_000_000,
+        n_equil_cycles: int = 3,
+        temperature: float = 300.0,
+        eq_reporter_frequency: int = 1_000,
+        prod_reporter_frequency: int = 10_000,
+        platform: str = 'CUDA',
+        device_ids: list[int] = [0],
+        force_constant: float = 10.0,
+        implicit_solvent: Singleton = GBn2,
+        solute_dielectric: float = 1.0,
+        solvent_dielectric: float = 78.5,
+        **kwargs,
+    ):
+        super().__init__(
+            path=path,
+            top_name=top_name,
+            coor_name=coor_name,
+            out_path=out_path,
+            ff=ff,
+            equil_steps=equil_steps,
+            prod_steps=prod_steps,
+            n_equil_cycles=n_equil_cycles,
+            temperature=temperature,
+            eq_reporter_frequency=eq_reporter_frequency,
+            prod_reporter_frequency=prod_reporter_frequency,
+            platform=platform,
+            device_ids=device_ids,
+            force_constant=force_constant,
+        )
         self.solvent = implicit_solvent
         self.solute_dielectric = solute_dielectric
         self.solvent_dielectric = solvent_dielectric
         # solvent screening parameter for 150mM ions
         # k = 367.434915 * sqrt(conc. [M] / (solvent_dielectric * T))
-        self.kappa = 367.434915 * np.sqrt(.15 / (solvent_dielectric * 300))
+        self.kappa = 367.434915 * np.sqrt(0.15 / (solvent_dielectric * 300))
 
     def load_amber_files(self) -> System:
         """Build an OpenMM system with implicit solvent.
@@ -776,15 +800,16 @@ class ImplicitSimulator(Simulator):
             self.coordinate = AmberInpcrdFile(str(self.coor_file))
             self.topology = AmberPrmtopFile(str(self.top_file))
 
-
-        system = self.topology.createSystem(nonbondedMethod=NoCutoff,
-                                            removeCMMotion=False,
-                                            constraints=HBonds,
-                                            hydrogenMass=self.h_mass,
-                                            implicitSolvent=self.solvent,
-                                            soluteDielectric=self.solute_dielectric,
-                                            solventDielectric=self.solvent_dielectric,
-                                            implicitSolventKappa=self.kappa / nanometer)
+        system = self.topology.createSystem(
+            nonbondedMethod=NoCutoff,
+            removeCMMotion=False,
+            constraints=HBonds,
+            hydrogenMass=self.h_mass,
+            implicitSolvent=self.solvent,
+            soluteDielectric=self.solute_dielectric,
+            solventDielectric=self.solvent_dielectric,
+            implicitSolventKappa=self.kappa / nanometer,
+        )
 
         return system
 
@@ -798,11 +823,13 @@ class ImplicitSimulator(Simulator):
             Equilibrated OpenMM Simulation object.
         """
         system = self.load_system()
-        system = self.add_backbone_posres(system,
-                                          self.coordinate.positions,
-                                          self.topology.topology.atoms(),
-                                          self.indices,
-                                          self.k)
+        system = self.add_backbone_posres(
+            system,
+            self.coordinate.positions,
+            self.topology.topology.atoms(),
+            self.indices,
+            self.k,
+        )
 
         simulation, integrator = self.setup_sim(system, dt=0.002)
 
@@ -813,12 +840,16 @@ class ImplicitSimulator(Simulator):
         state = simulation.context.getState(getEnergy=True)
         print(f'Energy after minimization: {state.getPotentialEnergy()}')
 
-        simulation.reporters.append(StateDataReporter(str(self.eq_log),
-                                                      self.eq_freq,
-                                                      step=True,
-                                                      potentialEnergy=True,
-                                                      speed=True,
-                                                      temperature=True))
+        simulation.reporters.append(
+            StateDataReporter(
+                str(self.eq_log),
+                self.eq_freq,
+                step=True,
+                potentialEnergy=True,
+                speed=True,
+                temperature=True,
+            )
+        )
         simulation.reporters.append(DCDReporter(str(self.eq_dcd), self.eq_freq))
 
         simulation, integrator = self._heating(simulation, integrator)
@@ -826,9 +857,7 @@ class ImplicitSimulator(Simulator):
 
         return simulation
 
-    def production(self,
-                   chkpt: PathLike,
-                   restart: bool = False) -> None:
+    def production(self, chkpt: PathLike, restart: bool = False) -> None:
         """Run production MD for implicit solvent (no barostat).
 
         Args:
@@ -840,17 +869,12 @@ class ImplicitSimulator(Simulator):
 
         simulation.context.reinitialize(True)
 
-        if restart:
-            log_file = open(str(self.prod_log), 'a')
-        else:
-            log_file = str(self.prod_log)
+        log_file = open(self.prod_log, 'a') if restart else str(self.prod_log)
 
         simulation = self.load_checkpoint(simulation, chkpt)
-        simulation = self.attach_reporters(simulation,
-                                           self.dcd,
-                                           log_file,
-                                           str(self.restart),
-                                           restart=restart)
+        simulation = self.attach_reporters(
+            simulation, self.dcd, log_file, str(self.restart), restart=restart
+        )
 
         self.simulation = self._production(simulation)  # save simulation object
 
@@ -874,23 +898,25 @@ class CustomForcesSimulator(Simulator):
 
     Example:
         >>> from openmm import CustomBondForce
-        >>> force = CustomBondForce("0.5*k*(r-r0)^2")
-        >>> force.addGlobalParameter("k", 1000)
-        >>> force.addGlobalParameter("r0", 0.3)
+        >>> force = CustomBondForce('0.5*k*(r-r0)^2')
+        >>> force.addGlobalParameter('k', 1000)
+        >>> force.addGlobalParameter('r0', 0.3)
         >>> sim = CustomForcesSimulator('./sim', [force])
         >>> sim.run()
     """
 
-    def __init__(self,
-                 path: str,
-                 custom_force_objects: list,
-                 equil_steps: int = 1_250_000,
-                 prod_steps: int = 250_000_000,
-                 n_equil_cycles: int = 3,
-                 reporter_frequency: int = 1_000,
-                 platform: str = 'CUDA',
-                 device_ids: list[int] = [0],
-                 equilibration_force_constant: float = 10.):
+    def __init__(
+        self,
+        path: str,
+        custom_force_objects: list,
+        equil_steps: int = 1_250_000,
+        prod_steps: int = 250_000_000,
+        n_equil_cycles: int = 3,
+        reporter_frequency: int = 1_000,
+        platform: str = 'CUDA',
+        device_ids: list[int] = [0],
+        equilibration_force_constant: float = 10.0,
+    ):
         super().__init__(
             path=path,
             equil_steps=equil_steps,
@@ -900,7 +926,7 @@ class CustomForcesSimulator(Simulator):
             prod_reporter_frequency=reporter_frequency,
             platform=platform,
             device_ids=device_ids,
-            force_constant=equilibration_force_constant
+            force_constant=equilibration_force_constant,
         )
         self.custom_forces = custom_force_objects
 
@@ -914,14 +940,17 @@ class CustomForcesSimulator(Simulator):
             self.coor_file = self.path / 'system.inpcrd'
             self.top_file = self.path / 'system.prmtop'
             self.coordinate = AmberInpcrdFile(str(self.coor_file))
-            self.topology = AmberPrmtopFile(str(self.top_file),
-                                            periodicBoxVectors=self.coordinate.boxVectors)
+            self.topology = AmberPrmtopFile(
+                str(self.top_file), periodicBoxVectors=self.coordinate.boxVectors
+            )
 
-        system = self.topology.createSystem(nonbondedMethod=PME,
-                                            removeCMMotion=False,
-                                            nonbondedCutoff=1. * nanometer,
-                                            constraints=HBonds,
-                                            hydrogenMass=1.5 * amu)
+        system = self.topology.createSystem(
+            nonbondedMethod=PME,
+            removeCMMotion=False,
+            nonbondedCutoff=1.0 * nanometer,
+            constraints=HBonds,
+            hydrogenMass=1.5 * amu,
+        )
 
         system = self.add_forces(system)
 
@@ -959,17 +988,19 @@ class Minimizer:
         >>> minimizer = Minimizer(
         ...     topology='system.prmtop',
         ...     coordinates='system.inpcrd',
-        ...     out='minimized.pdb'
+        ...     out='minimized.pdb',
         ... )
         >>> minimizer.minimize()
     """
 
-    def __init__(self,
-                 topology: PathLike,
-                 coordinates: PathLike,
-                 out: PathLike = 'min.pdb',
-                 platform: str = 'OpenCL',
-                 device_ids: list[int] | None = [0]):
+    def __init__(
+        self,
+        topology: PathLike,
+        coordinates: PathLike,
+        out: PathLike = 'min.pdb',
+        platform: str = 'OpenCL',
+        device_ids: list[int] | None = [0],
+    ):
         self.topology = Path(topology)
         self.coordinates = Path(coordinates)
 
@@ -979,7 +1010,9 @@ class Minimizer:
         self.properties = {'Precision': 'mixed'}
 
         if device_ids is not None:
-            self.properties.update({'DeviceIndex': ','.join([str(x) for x in device_ids])})
+            self.properties.update(
+                {'DeviceIndex': ','.join([str(x) for x in device_ids])}
+            )
 
     def minimize(self) -> None:
         """Perform energy minimization and save structure.
@@ -988,14 +1021,12 @@ class Minimizer:
         the final coordinates to a PDB file.
         """
         system = self.load_files()
-        integrator = LangevinMiddleIntegrator(300 * kelvin,
-                                              1 / picosecond,
-                                              0.001 * picoseconds)
-        simulation = Simulation(self.topology,
-                                system,
-                                integrator,
-                                self.platform,
-                                self.properties)
+        integrator = LangevinMiddleIntegrator(
+            300 * kelvin, 1 / picosecond, 0.001 * picoseconds
+        )
+        simulation = Simulation(
+            self.topology, system, integrator, self.platform, self.properties
+        )
 
         simulation.context.setPositions(self.coordinates.positions)
 
@@ -1004,10 +1035,9 @@ class Minimizer:
         state = simulation.context.getState(getPositions=True)
         positions = state.getPositions()
 
-        PDBFile.writeFile(self.topology.topology,
-                          positions,
-                          file=str(self.out),
-                          keepIds=True)
+        PDBFile.writeFile(
+            self.topology.topology, positions, file=str(self.out), keepIds=True
+        )
 
     def load_files(self) -> System:
         """Load system based on topology file extension.
@@ -1025,8 +1055,9 @@ class Minimizer:
         elif self.topology.suffix == '.pdb':
             system = self.load_pdb()
         else:
-            raise FileNotFoundError('No viable simulation input files found'
-                                    f'at path: {self.path}!')
+            raise FileNotFoundError(
+                f'No viable simulation input files foundat path: {self.path}!'
+            )
 
         return system
 
@@ -1037,11 +1068,13 @@ class Minimizer:
             OpenMM System object from AMBER files.
         """
         self.coordinates = AmberInpcrdFile(str(self.coordinates))
-        self.topology = AmberPrmtopFile(str(self.topology),
-                                        periodicBoxVectors=self.coordinates.boxVectors)
+        self.topology = AmberPrmtopFile(
+            str(self.topology), periodicBoxVectors=self.coordinates.boxVectors
+        )
 
-        system = self.topology.createSystem(nonbondedMethod=NoCutoff,
-                                            constraints=HBonds)
+        system = self.topology.createSystem(
+            nonbondedMethod=NoCutoff, constraints=HBonds
+        )
 
         return system
 
@@ -1054,13 +1087,11 @@ class Minimizer:
         Returns:
             OpenMM System object from GROMACS files.
         """
-        gro = list(self.path.glob('*.gro'))[0]
+        gro = next(iter(self.path.glob('*.gro')))
         self.coordinates = GromacsGroFile(str(gro))
-        self.topology = GromacsTopFile(str(self.topology),
-                                       includeDir='/usr/local/gromacs/share/gromacs/top')
+        self.topology = GromacsTopFile(str(self.topology), includeDir='/usr/local/gromacs/share/gromacs/top')
 
-        system = self.topology.createSystem(nonbondedMethod=NoCutoff,
-                                            constraints=HBonds)
+        system = self.topology.createSystem(nonbondedMethod=NoCutoff, constraints=HBonds)
 
         return system
 
@@ -1076,8 +1107,8 @@ class Minimizer:
         self.topology = self.coordinates.topology
         forcefield = ForceField('amber14-all.xml')
 
-        system = forcefield.createSystem(self.topology,
-                                         nonbondedMethod=NoCutoff,
-                                         constraints=HBonds)
+        system = forcefield.createSystem(
+            self.topology, nonbondedMethod=NoCutoff, constraints=HBonds
+        )
 
         return system

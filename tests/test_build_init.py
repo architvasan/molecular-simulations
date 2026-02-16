@@ -1,22 +1,21 @@
 """Tests for molecular_simulations.build module __init__.py functions."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
-import os
-import sys
+from unittest.mock import MagicMock, patch
 
+import pytest
 
 # Check for optional dependencies
 try:
-    from Bio.PDB import MMCIFParser, PDBIO
+    from Bio.PDB import PDBIO, MMCIFParser
+
     HAS_BIOPYTHON = True
 except ImportError:
     HAS_BIOPYTHON = False
 
 try:
     import gemmi
+
     HAS_GEMMI = True
 except ImportError:
     HAS_GEMMI = False
@@ -46,6 +45,7 @@ _atom_site.group_PDB
 _atom_site.id
 _atom_site.type_symbol
 _atom_site.label_atom_id
+_atom_site.label_alt_id
 _atom_site.label_comp_id
 _atom_site.label_asym_id
 _atom_site.label_seq_id
@@ -55,14 +55,17 @@ _atom_site.Cartn_z
 _atom_site.occupancy
 _atom_site.B_iso_or_equiv
 _atom_site.auth_asym_id
-ATOM 1 N N ALA A 1 0.000 0.000 0.000 1.00 0.00 A
+_atom_site.auth_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.pdbx_PDB_model_num
+ATOM 1 N N . ALA A 1 0.000 0.000 0.000 1.00 0.00 A 1 ? 1
 """
         cif_file.write_text(cif_content)
 
         result = convert_cif_with_biopython(str(cif_file))
 
         # Should return a Path with .pdb extension
-        assert str(result).endswith('.pdb')
+        assert str(result).endswith(".pdb")
         assert Path(result).exists()
 
     @pytest.mark.skipif(not HAS_BIOPYTHON, reason="Biopython not installed")
@@ -85,6 +88,7 @@ _atom_site.group_PDB
 _atom_site.id
 _atom_site.type_symbol
 _atom_site.label_atom_id
+_atom_site.label_alt_id
 _atom_site.label_comp_id
 _atom_site.label_asym_id
 _atom_site.label_seq_id
@@ -94,13 +98,16 @@ _atom_site.Cartn_z
 _atom_site.occupancy
 _atom_site.B_iso_or_equiv
 _atom_site.auth_asym_id
-ATOM 1 N N ALA A 1 0.000 0.000 0.000 1.00 0.00 A
+_atom_site.auth_seq_id
+_atom_site.pdbx_PDB_ins_code
+_atom_site.pdbx_PDB_model_num
+ATOM 1 N N . ALA A 1 0.000 0.000 0.000 1.00 0.00 A 1 ? 1
 """
         cif_file.write_text(cif_content)
 
         result = convert_cif_with_biopython(cif_file)
 
-        assert result == cif_file.with_suffix('.pdb')
+        assert result == cif_file.with_suffix(".pdb")
 
 
 class TestConvertCifWithGemmi:
@@ -132,7 +139,22 @@ _atom_site.Cartn_z
 
         convert_cif_with_gemmi(cif_file)
 
-        assert cif_file.with_suffix('.pdb').exists()
+        assert cif_file.with_suffix(".pdb").exists()
+
+    def test_convert_cif_with_gemmi_mocked(self, tmp_path):
+        """Test convert_cif_with_gemmi with mocked gemmi."""
+        mock_gemmi = MagicMock()
+        mock_structure = MagicMock()
+        mock_gemmi.read_structure.return_value = mock_structure
+
+        with patch.dict("sys.modules", {"gemmi": mock_gemmi}):
+            from molecular_simulations.build import convert_cif_with_gemmi
+
+            cif_file = tmp_path / "test.cif"
+            convert_cif_with_gemmi(cif_file)
+
+            mock_gemmi.read_structure.assert_called_once_with(str(cif_file))
+            mock_structure.write.assert_called_once_with(str(tmp_path / "test.pdb"))
 
 
 class TestAddChains:
@@ -156,7 +178,7 @@ END
         add_chains(pdb_file)
 
         # Check output file was created
-        output_file = pdb_file.parent / (pdb_file.stem + '_withchains.pdb')
+        output_file = pdb_file.parent / (pdb_file.stem + "_withchains.pdb")
         assert output_file.exists()
 
     def test_add_chains_with_residue_range(self, tmp_path):
@@ -168,16 +190,20 @@ END
         lines = []
         atom_num = 1
         for resid in range(1, 11):
-            lines.append(f"ATOM  {atom_num:5d}  N   ALA A{resid:4d}       0.000   0.000   0.000  1.00  0.00           N\n")
+            lines.append(
+                f"ATOM  {atom_num:5d}  N   ALA A{resid:4d}       0.000   0.000   0.000  1.00  0.00           N\n"
+            )
             atom_num += 1
-            lines.append(f"ATOM  {atom_num:5d}  CA  ALA A{resid:4d}       1.458   0.000   0.000  1.00  0.00           C\n")
+            lines.append(
+                f"ATOM  {atom_num:5d}  CA  ALA A{resid:4d}       1.458   0.000   0.000  1.00  0.00           C\n"
+            )
             atom_num += 1
         lines.append("END\n")
         pdb_file.write_text("".join(lines))
 
         add_chains(pdb_file, first_res=1, last_res=5)
 
-        output_file = pdb_file.parent / (pdb_file.stem + '_withchains.pdb')
+        output_file = pdb_file.parent / (pdb_file.stem + "_withchains.pdb")
         assert output_file.exists()
 
 
@@ -187,22 +213,25 @@ class TestImports:
     def test_import_explicit_solvent(self):
         """Test that ExplicitSolvent is importable."""
         from molecular_simulations.build import ExplicitSolvent
+
         assert ExplicitSolvent is not None
 
     def test_import_implicit_solvent(self):
         """Test that ImplicitSolvent is importable."""
         from molecular_simulations.build import ImplicitSolvent
+
         assert ImplicitSolvent is not None
 
     def test_import_interface_builder(self):
         """Test that InterfaceBuilder is importable."""
         from molecular_simulations.build import InterfaceBuilder
+
         assert InterfaceBuilder is not None
 
     def test_pathlike_type(self):
         """Test PathLike type alias."""
+
         from molecular_simulations.build import PathLike
-        from pathlib import Path
-        from typing import Union
+
         # PathLike should accept both Path and str
         assert PathLike is not None

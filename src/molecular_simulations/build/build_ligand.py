@@ -11,23 +11,24 @@ Classes:
     ComplexBuilder: Build general protein-ligand complex systems.
 """
 
-from .build_amber import ImplicitSolvent, ExplicitSolvent
-import gc
-from glob import glob
 import json
+import os
+import shutil
+from glob import glob
+from pathlib import Path
+from typing import Union
+
 from MDAnalysis.lib.util import convert_aa_code
 from openbabel import pybel
-import os
-from pathlib import Path
 from pdbfixer import PDBFixer
 from pdbfixer.pdbfixer import Sequence
 from rdkit import Chem
-import shutil
-from typing import Dict, List, Union
+
+from .build_amber import ExplicitSolvent, ImplicitSolvent
 
 PathLike = Union[str, Path]
 OptPath = Union[str, Path, None]
-Sequences = List[Sequence]
+Sequences = list[Sequence]
 
 
 class LigandError(Exception):
@@ -44,7 +45,7 @@ class LigandError(Exception):
         >>> raise LigandError("Antechamber failed for molecule XYZ")
     """
 
-    def __init__(self, message='This system contains ligands which we cannot model!'):
+    def __init__(self, message="This system contains ligands which we cannot model!"):
         """Initialize the LigandError."""
         self.message = message
         super().__init__(self.message)
@@ -70,29 +71,27 @@ class LigandBuilder:
         out_lig: Path for output ligand files (without extension).
 
     Example:
-        >>> builder = LigandBuilder(
-        ...     path='./build',
-        ...     lig='ligand.sdf',
-        ...     lig_number=0
-        ... )
+        >>> builder = LigandBuilder(path="./build", lig="ligand.sdf", lig_number=0)
         >>> builder.parameterize_ligand()
     """
 
-    def __init__(self, path: PathLike, lig: str, lig_number: int = 0, file_prefix: str = ''):
+    def __init__(
+        self, path: PathLike, lig: str, lig_number: int = 0, file_prefix: str = ""
+    ):
         """Initialize the LigandBuilder."""
         self.path = path
         self.lig = path / lig
         self.ln = lig_number
-        self.out_lig = path / f'{file_prefix}{Path(lig).stem}'
+        self.out_lig = path / f"{file_prefix}{Path(lig).stem}"
 
-        if 'AMBERHOME' in os.environ:
-            amberhome = Path(os.environ['AMBERHOME'])
+        if "AMBERHOME" in os.environ:
+            amberhome = Path(os.environ["AMBERHOME"])
         else:
-            raise ValueError('AMBERHOME is not set in env vars!')
+            raise ValueError("AMBERHOME is not set in env vars!")
 
-        self.antechamber = str(amberhome / 'bin' / 'antechamber')
-        self.parmchk2 = str(amberhome / 'bin' / 'parmchk2')
-        self.tleap = str(amberhome / 'bin' / 'tleap')
+        self.antechamber = str(amberhome / "bin" / "antechamber")
+        self.parmchk2 = str(amberhome / "bin" / "parmchk2")
+        self.tleap = str(amberhome / "bin" / "tleap")
 
     def parameterize_ligand(self) -> None:
         """Generate GAFF2 parameters for the ligand.
@@ -110,9 +109,11 @@ class LigandBuilder:
         ext = self.lig.suffix
         self.lig = self.lig.stem
 
-        convert_to_gaff = f'{self.antechamber} -i {self.lig}_prep.mol2 -fi mol2 -o \
-                {self.out_lig}.mol2 -fo mol2 -at gaff2 -c bcc -s 0 -pf y -rn LG{self.ln}'
-        parmchk2_cmd = f'{self.parmchk2} -i {self.out_lig}.mol2 -f mol2 -o {self.out_lig}.frcmod'
+        convert_to_gaff = f"{self.antechamber} -i {self.lig}_prep.mol2 -fi mol2 -o \
+                {self.out_lig}.mol2 -fo mol2 -at gaff2 -c bcc -s 0 -pf y -rn LG{self.ln}"
+        parmchk2_cmd = (
+            f"{self.parmchk2} -i {self.out_lig}.mol2 -f mol2 -o {self.out_lig}.frcmod"
+        )
 
         tleap_ligand = f"""source leaprc.gaff2
         LG{self.ln} = loadmol2 {self.out_lig}.mol2
@@ -121,7 +122,7 @@ class LigandBuilder:
         quit
         """
 
-        if ext == '.sdf':
+        if ext == ".sdf":
             self.process_sdf()
         else:
             self.process_pdb()
@@ -133,9 +134,9 @@ class LigandBuilder:
             self.check_sqm()
             os.system(parmchk2_cmd)
             leap_file, leap_log = self.write_leap(tleap_ligand)
-            os.system(f'{self.tleap} -f {leap_file} > {leap_log}')
+            os.system(f"{self.tleap} -f {leap_file} > {leap_log}")
         except FileNotFoundError:
-            raise LigandError(f'Antechamber failed! {self.lig}')
+            raise LigandError(f"Antechamber failed! {self.lig}")
 
     def process_sdf(self) -> None:
         """Process an SDF file and add hydrogens.
@@ -144,9 +145,9 @@ class LigandBuilder:
         the input SDF file. Note that incorrect hybridization in the
         input will result in incorrect hydrogen placement.
         """
-        mol = Chem.SDMolSupplier(f'{self.lig}.sdf')[0]
+        mol = Chem.SDMolSupplier(f"{self.lig}.sdf")[0]
         molH = Chem.AddHs(mol, addCoords=True)
-        with Chem.SDWriter(f'{self.lig}_H.sdf') as w:
+        with Chem.SDWriter(f"{self.lig}_H.sdf") as w:
             w.write(molH)
 
     def process_pdb(self) -> None:
@@ -155,15 +156,15 @@ class LigandBuilder:
         Reads a small molecule PDB, adds hydrogens using RDKit,
         and writes the result to an SDF file.
         """
-        mol = Chem.MolFromPDBFile(f'{self.lig}.pdb')
+        mol = Chem.MolFromPDBFile(f"{self.lig}.pdb")
         molH = Chem.AddHs(mol, addCoords=True)
-        with Chem.SDWriter(f'{self.lig}_H.sdf') as w:
+        with Chem.SDWriter(f"{self.lig}_H.sdf") as w:
             w.write(molH)
 
     def convert_to_mol2(self) -> None:
         """Convert SDF to mol2 format using OpenBabel."""
-        mol = list(pybel.readfile('sdf', f'{self.lig}_H.sdf'))[0]
-        mol.write('mol2', f'{self.lig}_prep.mol2', True)
+        mol = list(pybel.readfile("sdf", f"{self.lig}_H.sdf"))[0]
+        mol.write("mol2", f"{self.lig}_prep.mol2", True)
 
     def move_antechamber_outputs(self) -> None:
         """Clean up antechamber output files.
@@ -171,9 +172,9 @@ class LigandBuilder:
         Removes unnecessary outputs and renames sqm.out for later
         verification that antechamber completed successfully.
         """
-        os.remove('sqm.in')
-        os.remove('sqm.pdb')
-        shutil.move('sqm.out', f'{self.lig}_sqm.out')
+        os.remove("sqm.in")
+        os.remove("sqm.pdb")
+        shutil.move("sqm.out", f"{self.lig}_sqm.out")
 
     def check_sqm(self) -> None:
         """Verify that SQM calculations completed successfully.
@@ -184,10 +185,10 @@ class LigandBuilder:
         Raises:
             LigandError: If SQM calculations did not complete.
         """
-        line = open(f'{self.lig}_sqm.out').readlines()[-2]
+        line = open(f"{self.lig}_sqm.out").readlines()[-2]
 
-        if 'Calculation Completed' not in line:
-            raise LigandError(f'SQM failed for ligand {self.lig}!')
+        if "Calculation Completed" not in line:
+            raise LigandError(f"SQM failed for ligand {self.lig}!")
 
     def write_leap(self, inp: str) -> tuple[str, str]:
         """Write a tleap input file.
@@ -198,9 +199,9 @@ class LigandBuilder:
         Returns:
             Tuple of (input_file_path, log_file_path).
         """
-        leap_file = f'{self.path}/tleap.in'
-        leap_log = f'{self.path}/leap.log'
-        with open(leap_file, 'w') as outfile:
+        leap_file = f"{self.path}/tleap.in"
+        leap_log = f"{self.path}/leap.log"
+        with open(leap_file, "w") as outfile:
             outfile.write(inp)
 
         return leap_file, leap_log
@@ -226,25 +227,27 @@ class PLINDERBuilder(ImplicitSolvent):
 
     Example:
         >>> builder = PLINDERBuilder(
-        ...     path='./plinder_data',
-        ...     system_id='1abc_A_B_ligand',
-        ...     out='./output'
+        ...     path="./plinder_data", system_id="1abc_A_B_ligand", out="./output"
         ... )
         >>> builder.build()
     """
 
-    def __init__(self,
-                 path: PathLike,
-                 system_id: str,
-                 out: PathLike,
-                 **kwargs):
+    def __init__(self, path: PathLike, system_id: str, out: PathLike, **kwargs):
         """Initialize the PLINDERBuilder."""
-        super().__init__(path / system_id, 'receptor.pdb', out / system_id,
-                         protein=True, rna=True, dna=True, phos_protein=True,
-                         mod_protein=True, **kwargs)
+        super().__init__(
+            path / system_id,
+            "receptor.pdb",
+            out / system_id,
+            protein=True,
+            rna=True,
+            dna=True,
+            phos_protein=True,
+            mod_protein=True,
+            **kwargs,
+        )
         self.system_id = system_id
-        self.ffs.append('leaprc.gaff2')
-        self.build_dir = self.out / 'build'
+        self.ffs.append("leaprc.gaff2")
+        self.build_dir = self.out / "build"
         self.ions = None
 
     def build(self) -> None:
@@ -259,13 +262,13 @@ class PLINDERBuilder(ImplicitSolvent):
         ligs = self.migrate_files()
 
         if not ligs:
-            print(f'No ligands!\n\n{self.pdb}')
+            print(f"No ligands!\n\n{self.pdb}")
             raise LigandError
 
         self.ligs = self.ligand_handler(ligs)
         self.assemble_system()
 
-    def ligand_handler(self, ligs: List[PathLike]) -> List[PathLike]:
+    def ligand_handler(self, ligs: list[PathLike]) -> list[PathLike]:
         """Parameterize all ligands in the system.
 
         Args:
@@ -282,7 +285,7 @@ class PLINDERBuilder(ImplicitSolvent):
 
         return ligands
 
-    def migrate_files(self) -> List[str]:
+    def migrate_files(self) -> list[str]:
         """Prepare input files for system building.
 
         Copies sequence files, fixes and moves the receptor PDB,
@@ -295,27 +298,25 @@ class PLINDERBuilder(ImplicitSolvent):
         os.chdir(self.build_dir)  # necessary for antechamber outputs
 
         # grab the sequence file to complete protein modeling
-        shutil.copy(str(self.path / 'sequences.fasta'),
-                    str(self.build_dir))
-        self.fasta = str(self.build_dir / 'sequences.fasta')
+        shutil.copy(str(self.path / "sequences.fasta"), str(self.build_dir))
+        self.fasta = str(self.build_dir / "sequences.fasta")
 
         # fix and move pdb
         self.prep_protein()
 
         # move ligand(s)
         ligands = []
-        lig_files = self.path / 'ligand_files'
-        ligs = [Path(lig) for lig in glob(str(lig_files) + '/*.sdf')]
+        lig_files = self.path / "ligand_files"
+        ligs = [Path(lig) for lig in glob(str(lig_files) + "/*.sdf")]
         for lig in ligs:
-            shutil.copy(str(lig),
-                        str(self.build_dir))
+            shutil.copy(str(lig), str(self.build_dir))
 
             if self.check_ligand(lig):
                 ligands.append(lig.name)
 
         # handle any potential ions
         if self.ions is not None:
-            self.ffs.append('leaprc.water.tip3p')
+            self.ffs.append("leaprc.water.tip3p")
             self.place_ions()
 
         return ligands
@@ -332,12 +333,12 @@ class PLINDERBuilder(ImplicitSolvent):
         """
         pdb_lines = open(self.pdb).readlines()[:-1]
 
-        if 'END' in pdb_lines[-1]:
-            if 'TER' in pdb_lines[-2]:
+        if "END" in pdb_lines[-1]:
+            if "TER" in pdb_lines[-2]:
                 ln = -3
             else:
                 ln = -2
-        elif 'TER' in pdb_lines[-1]:
+        elif "TER" in pdb_lines[-1]:
             ln = -2
         else:
             ln = -1
@@ -346,33 +347,33 @@ class PLINDERBuilder(ImplicitSolvent):
             next_atom_num = int(pdb_lines[ln][6:12].strip()) + 1
             next_resid = int(pdb_lines[ln][22:26].strip()) + 1
         except ValueError:
-            print(f'ERROR: {self.pdb}')
+            print(f"ERROR: {self.pdb}")
             raise LigandError
 
         for ion in self.ions:
             for atom in ion:
-                ion_line = f'ATOM  {next_atom_num:>5}'
+                ion_line = f"ATOM  {next_atom_num:>5}"
 
-                if atom[0].lower() in ['na', 'k', 'cl']:
+                if atom[0].lower() in ["na", "k", "cl"]:
                     ionname = atom[0] + atom[1]
-                    ion_line += f'{ionname:>4}  {ionname:<3} '
+                    ion_line += f"{ionname:>4}  {ionname:<3} "
                 else:
                     ionname = atom[0].upper()
-                    ion_line += f'{ionname:>3}   {ionname:<3}'
+                    ion_line += f"{ionname:>3}   {ionname:<3}"
 
-                coords = ''.join([f'{x:>8.3f}' for x in atom[2:]])
-                ion_line += f'{next_resid:>5}    {coords}  0.00  0.00\n'
+                coords = "".join([f"{x:>8.3f}" for x in atom[2:]])
+                ion_line += f"{next_resid:>5}    {coords}  0.00  0.00\n"
 
                 pdb_lines.append(ion_line)
-                pdb_lines.append('TER\n')
+                pdb_lines.append("TER\n")
 
                 next_atom_num += 1
                 next_resid += 1
 
-        pdb_lines.append('END')
+        pdb_lines.append("END")
 
-        with open(self.pdb, 'w') as f:
-            f.write(''.join(pdb_lines))
+        with open(self.pdb, "w") as f:
+            f.write("".join(pdb_lines))
 
     def assemble_system(self) -> None:
         """Assemble the protein-ligand complex with tleap.
@@ -380,32 +381,34 @@ class PLINDERBuilder(ImplicitSolvent):
         Creates topology and coordinate files for the complex,
         including all parameterized ligands and ions.
         """
-        tleap_complex = [f'source {ff}' for ff in self.ffs]
-        structs = [f'PROT = loadpdb {self.pdb}']
-        combine = 'COMPLEX = combine{PROT'
+        tleap_complex = [f"source {ff}" for ff in self.ffs]
+        structs = [f"PROT = loadpdb {self.pdb}"]
+        combine = "COMPLEX = combine{PROT"
         for i, lig in enumerate(self.ligs):
             ligand = self.build_dir / lig
-            tleap_complex += [f'loadamberparams {ligand}.frcmod',
-                              f'loadoff {ligand}.lib']
-            structs += [f'LG{i} = loadmol2 {ligand}.mol2']
-            combine += f' LG{i}'
+            tleap_complex += [
+                f"loadamberparams {ligand}.frcmod",
+                f"loadoff {ligand}.lib",
+            ]
+            structs += [f"LG{i} = loadmol2 {ligand}.mol2"]
+            combine += f" LG{i}"
 
-        combine += '}'
+        combine += "}"
         tleap_complex += structs
         tleap_complex.append(combine)
         tleap_complex += [
-            'set default PBRadii mbondi3',
-            f'savepdb COMPLEX {self.out}/system.pdb',
-            f'saveamberparm COMPLEX {self.out}/system.prmtop {self.out}/system.inpcrd',
-            'quit'
+            "set default PBRadii mbondi3",
+            f"savepdb COMPLEX {self.out}/system.pdb",
+            f"saveamberparm COMPLEX {self.out}/system.prmtop {self.out}/system.inpcrd",
+            "quit",
         ]
 
-        tleap_complex = '\n'.join(tleap_complex)
-        leap_file = self.build_dir / 'tleap.in'
-        with open(str(leap_file), 'w') as outfile:
+        tleap_complex = "\n".join(tleap_complex)
+        leap_file = self.build_dir / "tleap.in"
+        with open(str(leap_file), "w") as outfile:
             outfile.write(tleap_complex)
 
-        tleap = f'tleap -f {leap_file}'
+        tleap = f"tleap -f {leap_file}"
         os.system(tleap)
 
     def prep_protein(self) -> None:
@@ -415,19 +418,17 @@ class PLINDERBuilder(ImplicitSolvent):
         to remove hydrogens and waters for clean tleap input.
         """
         raw_pdb = self.path / self.pdb
-        prep_pdb = self.build_dir / 'prepped.pdb'
-        self.pdb = self.build_dir / 'protein.pdb'
+        prep_pdb = self.build_dir / "prepped.pdb"
+        self.pdb = self.build_dir / "protein.pdb"
 
         # complex workflow for modeling missing residues
         self.triage_pdb(raw_pdb, prep_pdb)
 
         # remove hydrogens (-y) and waters (-d) from the input PDB
-        pdb4amber = f'pdb4amber -i {prep_pdb} -o {self.pdb} -y -d'
+        pdb4amber = f"pdb4amber -i {prep_pdb} -o {self.pdb} -y -d"
         os.system(pdb4amber)
 
-    def triage_pdb(self,
-                   broken_pdb: PathLike,
-                   repaired_pdb: PathLike) -> None:
+    def triage_pdb(self, broken_pdb: PathLike, repaired_pdb: PathLike) -> None:
         """Repair a PDB structure using PDBFixer.
 
         Runs PDBFixer to add missing loops and atoms. Uses FASTA
@@ -440,8 +441,7 @@ class PLINDERBuilder(ImplicitSolvent):
         """
         fixer = PDBFixer(filename=str(broken_pdb))
         chains = [chain for chain in fixer.topology.chains()]
-        chain_map = {chain.id: [res for res in chain.residues()]
-                     for chain in chains}
+        chain_map = {chain.id: [res for res in chain.residues()] for chain in chains}
 
         # non-databank models do not have SEQRES and therefore no
         # sequence data to model missing residues
@@ -450,11 +450,10 @@ class PLINDERBuilder(ImplicitSolvent):
         fixer.findMissingAtoms()
         fixer.addMissingAtoms()
 
-        with open(str(repaired_pdb), 'w') as f:
+        with open(str(repaired_pdb), "w") as f:
             PDBFile.writeFile(fixer.topology, fixer.positions, f)
 
-    def inject_fasta(self,
-                     chain_map: Dict[str, List[str]]) -> Sequences:
+    def inject_fasta(self, chain_map: dict[str, list[str]]) -> Sequences:
         """Inject FASTA sequence data for PDBFixer.
 
         Checks FASTA against actual sequence and modifies to correctly
@@ -470,34 +469,28 @@ class PLINDERBuilder(ImplicitSolvent):
             LigandError: If unknown residues are found in the FASTA.
         """
         fasta = open(self.fasta).readlines()
-        remapping = json.load(open(f'{self.path}/chain_mapping.json', 'rb'))
+        remapping = json.load(open(f"{self.path}/chain_mapping.json", "rb"))
         sequences = []
         for i in range(len(fasta) // 2):
-            seq_chain = fasta[2*i].strip()[1:]  # strip off > and \n
+            seq_chain = fasta[2 * i].strip()[1:]  # strip off > and \n
             chain = remapping[seq_chain]
-            one_letter_seq = fasta[2*i+1].strip()
+            one_letter_seq = fasta[2 * i + 1].strip()
             try:
                 three_letter_seq = [convert_aa_code(aa) for aa in one_letter_seq]
             except ValueError:
-                print(f'\nUnknown residue in fasta!\n\n{self.pdb}')
+                print(f"\nUnknown residue in fasta!\n\n{self.pdb}")
                 raise LigandError
 
             try:
-                three_letter_seq = self.check_ptms(three_letter_seq,
-                                                   chain_map[chain])
-                sequences.append(
-                    Sequence(chainId=chain,
-                             residues=three_letter_seq)
-                )
+                three_letter_seq = self.check_ptms(three_letter_seq, chain_map[chain])
+                sequences.append(Sequence(chainId=chain, residues=three_letter_seq))
             except KeyError:
-                print(f'\nUnknown ligand error!\n\n{self.pdb}')
+                print(f"\nUnknown ligand error!\n\n{self.pdb}")
                 raise LigandError
 
         return sequences
 
-    def check_ptms(self,
-                   sequence: List[str],
-                   chain_residues: List[str]) -> List[str]:
+    def check_ptms(self, sequence: list[str], chain_residues: list[str]) -> list[str]:
         """Check for post-translational modifications in the sequence.
 
         Compares the full sequence from FASTA against the partial
@@ -521,7 +514,7 @@ class PLINDERBuilder(ImplicitSolvent):
                 if sequence[resID] != residue.name:
                     sequence[resID] = residue.name
             except IndexError:
-                print(f'Sequence length is messed up!\n\n{self.pdb}')
+                print(f"Sequence length is messed up!\n\n{self.pdb}")
                 raise LigandError
 
         return sequence
@@ -549,9 +542,9 @@ class PLINDERBuilder(ImplicitSolvent):
                 charge = atom.GetFormalCharge()
                 if charge != 0:
                     ion = True
-                    sign = '+' if charge > 0 else '-'
+                    sign = "+" if charge > 0 else "-"
                     if abs(charge) > 1:
-                        sign = f'{charge}{sign}'
+                        sign = f"{charge}{sign}"
 
                     ligand.append([symbol, sign] + [x for x in position])
 
@@ -565,21 +558,44 @@ class PLINDERBuilder(ImplicitSolvent):
         return True
 
     @property
-    def cation_list(self) -> List[str]:
+    def cation_list(self) -> list[str]:
         """List of common cation element symbols (lowercase)."""
         return [
-            'na', 'k', 'ca', 'mn', 'mg', 'li', 'rb', 'cs', 'cu',
-            'ag', 'au', 'ti', 'be', 'sr', 'ba', 'ra', 'v', 'cr',
-            'fe', 'co', 'zn', 'ni', 'pd', 'cd', 'sn', 'pt', 'hg',
-            'pb', 'al'
+            "na",
+            "k",
+            "ca",
+            "mn",
+            "mg",
+            "li",
+            "rb",
+            "cs",
+            "cu",
+            "ag",
+            "au",
+            "ti",
+            "be",
+            "sr",
+            "ba",
+            "ra",
+            "v",
+            "cr",
+            "fe",
+            "co",
+            "zn",
+            "ni",
+            "pd",
+            "cd",
+            "sn",
+            "pt",
+            "hg",
+            "pb",
+            "al",
         ]
 
     @property
-    def anion_list(self) -> List[str]:
+    def anion_list(self) -> list[str]:
         """List of common anion element symbols (lowercase)."""
-        return [
-            'cl', 'br', 'i', 'f'
-        ]
+        return ["cl", "br", "i", "f"]
 
 
 class ComplexBuilder(ExplicitSolvent):
@@ -606,21 +622,29 @@ class ComplexBuilder(ExplicitSolvent):
 
     Example:
         >>> builder = ComplexBuilder(
-        ...     path='./build',
-        ...     pdb='protein.pdb',
-        ...     lig='ligand.sdf',
-        ...     padding=12.0
+        ...     path="./build", pdb="protein.pdb", lig="ligand.sdf", padding=12.0
         ... )
         >>> builder.build()
     """
 
-    def __init__(self, path: str, pdb: str, lig: str | list[str], padding: float = 10.,
-                 lig_param_prefix: str | None = None, **kwargs):
+    def __init__(
+        self,
+        path: str,
+        pdb: str,
+        lig: str | list[str],
+        padding: float = 10.0,
+        lig_param_prefix: str | None = None,
+        **kwargs,
+    ):
         """Initialize the ComplexBuilder."""
         super().__init__(path, pdb, padding)
-        self.lig = Path(lig).resolve() if isinstance(lig, str) else [Path(l).resolve() for l in lig]
-        self.ffs.append('leaprc.gaff2')
-        self.build_dir = self.out.parent / 'build'
+        self.lig = (
+            Path(lig).resolve()
+            if isinstance(lig, str)
+            else [Path(l).resolve() for l in lig]
+        )
+        self.ffs.append("leaprc.gaff2")
+        self.build_dir = self.out.parent / "build"
 
         if lig_param_prefix is None:
             self.lig_param_prefix = lig_param_prefix
@@ -653,7 +677,7 @@ class ComplexBuilder(ExplicitSolvent):
         else:
             self.lig = self.lig_param_prefix
 
-        if hasattr(self, 'ion'):
+        if hasattr(self, "ion"):
             self.add_ion_to_pdb()
 
         self.prep_pdb()
@@ -675,7 +699,7 @@ class ComplexBuilder(ExplicitSolvent):
             shutil.copy(lig, self.build_dir)
 
         if prefix is None:
-            prefix = ''
+            prefix = ""
 
         lig_builder = LigandBuilder(self.build_dir, lig, file_prefix=prefix)
         lig_builder.parameterize_ligand()
@@ -688,20 +712,23 @@ class ComplexBuilder(ExplicitSolvent):
         Reads ion coordinates from a separate file and appends them
         to the protein PDB before the END record.
         """
-        ion = [line for line in open(self.ion).readlines()
-               if any(['ATOM' in line, 'HETATM' in line])]
+        ion = [
+            line
+            for line in open(self.ion).readlines()
+            if any(["ATOM" in line, "HETATM" in line])
+        ]
         pdb = [line for line in open(self.pdb).readlines()]
 
         out_pdb = []
         for line in pdb:
-            if 'END' in line:
+            if "END" in line:
                 out_pdb.extend(ion)
                 out_pdb.append(line)
             else:
                 out_pdb.append(line)
 
-        with open(self.pdb, 'w') as f:
-            f.write(''.join(out_pdb))
+        with open(self.pdb, "w") as f:
+            f.write("".join(out_pdb))
 
     def assemble_system(self, dim: float, num_ions: int) -> None:
         """Assemble the solvated protein-ligand complex.
@@ -713,10 +740,10 @@ class ComplexBuilder(ExplicitSolvent):
             dim: Box dimension in Angstroms.
             num_ions: Number of Na+/Cl- pairs for 150mM concentration.
         """
-        tleap_ffs = '\n'.join([f'source {ff}' for ff in self.ffs])
+        tleap_ffs = "\n".join([f"source {ff}" for ff in self.ffs])
         tleap_complex = [
             tleap_ffs,
-            'source leaprc.gaff2',
+            "source leaprc.gaff2",
         ]
 
         if not isinstance(self.lig, list):
@@ -725,34 +752,34 @@ class ComplexBuilder(ExplicitSolvent):
         LABELS = []
         for i, lig in enumerate(self.lig):
             tleap_complex += [
-                f'loadamberparams {lig}.frcmod',
-                f'loadoff {lig}.lib',
-                f'LG{i} = loadmol2 {lig}.mol2',
+                f"loadamberparams {lig}.frcmod",
+                f"loadoff {lig}.lib",
+                f"LG{i} = loadmol2 {lig}.mol2",
             ]
 
-            LABELS.append(f'LG{i}')
+            LABELS.append(f"LG{i}")
 
-        LABELS.append('PROT')
-        LABELS = ' '.join(LABELS)
-        
-        out_top = self.out.with_suffix('.prmtop')
-        out_coor = self.out.with_suffix('.inpcrd')
+        LABELS.append("PROT")
+        LABELS = " ".join(LABELS)
+
+        out_top = self.out.with_suffix(".prmtop")
+        out_coor = self.out.with_suffix(".inpcrd")
 
         tleap_complex += [
-            f'PROT = loadpdb {self.pdb}',
-            f'COMPLEX = combine {{{LABELS}}}',
-            'setbox COMPLEX centers',
-            f'set COMPLEX box {{{dim} {dim} {dim}}}',
-            f'solvatebox COMPLEX {self.water_box} {{0 0 0}}',
-            'addions COMPLEX Na+ 0',
-            'addions COMPLEX Cl- 0',
-            f'addIonsRand COMPLEX Na+ {num_ions} Cl- {num_ions}',
-            f'savepdb COMPLEX {self.out}',
-            f'saveamberparm COMPLEX {out_top} {out_coor}',
-            'quit'
+            f"PROT = loadpdb {self.pdb}",
+            f"COMPLEX = combine {{{LABELS}}}",
+            "setbox COMPLEX centers",
+            f"set COMPLEX box {{{dim} {dim} {dim}}}",
+            f"solvatebox COMPLEX {self.water_box} {{0 0 0}}",
+            "addions COMPLEX Na+ 0",
+            "addions COMPLEX Cl- 0",
+            f"addIonsRand COMPLEX Na+ {num_ions} Cl- {num_ions}",
+            f"savepdb COMPLEX {self.out}",
+            f"saveamberparm COMPLEX {out_top} {out_coor}",
+            "quit",
         ]
 
         if self.debug:
-            self.debug_tleap('\n'.join(tleap_complex))
+            self.debug_tleap("\n".join(tleap_complex))
         else:
-            self.temp_tleap('\n'.join(tleap_complex))
+            self.temp_tleap("\n".join(tleap_complex))

@@ -4,13 +4,13 @@ Unit tests for simulate/reporters.py module
 This module tests the custom OpenMM reporters used for tracking
 reaction coordinates during EVB simulations.
 """
-import pytest
-import numpy as np
+
 import tempfile
 from pathlib import Path
-from typing import Any
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock
 
+import numpy as np
+import pytest
 
 # Mark tests that don't require OpenMM as unit tests
 pytestmark = pytest.mark.unit
@@ -29,7 +29,7 @@ class TestRCReporterInit:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -45,7 +45,7 @@ class TestRCReporterInit:
             reporter.file.close()
 
             content = rc_file.read_text()
-            assert 'rc0,rc,dist_ik, dist_jk' in content
+            assert "rc0,rc,dist_ik, dist_jk" in content
 
     def test_rc_reporter_stores_parameters(self) -> None:
         """Test RCReporter stores initialization parameters correctly."""
@@ -53,7 +53,7 @@ class TestRCReporterInit:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -74,7 +74,7 @@ class TestRCReporterInit:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -102,7 +102,7 @@ class TestRCReporterDescribeNextReport:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -139,7 +139,7 @@ class TestRCReporterDescribeNextReport:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -159,15 +159,18 @@ class TestRCReporterDescribeNextReport:
 
             reporter.file.close()
 
-    @pytest.mark.parametrize("current_step,interval,expected", [
-        (0, 10, 10),
-        (5, 10, 5),
-        (9, 10, 1),
-        (10, 10, 10),
-        (11, 10, 9),
-        (99, 100, 1),
-        (150, 100, 50),
-    ])
+    @pytest.mark.parametrize(
+        "current_step,interval,expected",
+        [
+            (0, 10, 10),
+            (5, 10, 5),
+            (9, 10, 1),
+            (10, 10, 10),
+            (11, 10, 9),
+            (99, 100, 1),
+            (150, 100, 50),
+        ],
+    )
     def test_describe_next_report_various_steps(
         self, current_step: int, interval: int, expected: int
     ) -> None:
@@ -176,7 +179,7 @@ class TestRCReporterDescribeNextReport:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -207,7 +210,7 @@ class TestRCReporterReport:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -221,11 +224,13 @@ class TestRCReporterReport:
             # Create mock state with positions
             mock_state = MagicMock()
             # Positions: atom 0 at origin, atom 1 at (1,0,0), atom 2 at (0.5,0,0)
-            positions = np.array([
-                [0.0, 0.0, 0.0],
-                [1.0, 0.0, 0.0],
-                [0.5, 0.0, 0.0],
-            ])
+            positions = np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [0.5, 0.0, 0.0],
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -233,14 +238,14 @@ class TestRCReporterReport:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
+            lines = content.strip().split("\n")
 
             # Should have header + 1 data line
             assert len(lines) == 2
 
             # Parse data line
             data_line = lines[1]
-            values = data_line.split(',')
+            values = data_line.split(",")
 
             assert len(values) == 4
 
@@ -265,7 +270,7 @@ class TestRCReporterReport:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -279,11 +284,13 @@ class TestRCReporterReport:
             # Report 3 times with different positions
             for i in range(3):
                 mock_state = MagicMock()
-                positions = np.array([
-                    [0.0, 0.0, 0.0],
-                    [float(i + 1), 0.0, 0.0],
-                    [0.5, 0.0, 0.0],
-                ])
+                positions = np.array(
+                    [
+                        [0.0, 0.0, 0.0],
+                        [float(i + 1), 0.0, 0.0],
+                        [0.5, 0.0, 0.0],
+                    ]
+                )
                 mock_state.getPositions.return_value = positions
                 mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -292,7 +299,7 @@ class TestRCReporterReport:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
+            lines = content.strip().split("\n")
 
             # Should have header + 3 data lines
             assert len(lines) == 4
@@ -303,7 +310,7 @@ class TestRCReporterReport:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -347,7 +354,7 @@ class TestRCReporterDistanceCalculations:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             # Atoms: i=0, j=1, k=2
             reporter = RCReporter(
@@ -364,11 +371,13 @@ class TestRCReporterDistanceCalculations:
             # i at (0,0,0), k at (0.3,0,0), j at (1,0,0)
             # dist_ik = 0.3, dist_jk = 0.7
             # rc = 0.3 - 0.7 = -0.4
-            positions = np.array([
-                [0.0, 0.0, 0.0],  # i
-                [1.0, 0.0, 0.0],  # j
-                [0.3, 0.0, 0.0],  # k
-            ])
+            positions = np.array(
+                [
+                    [0.0, 0.0, 0.0],  # i
+                    [1.0, 0.0, 0.0],  # j
+                    [0.3, 0.0, 0.0],  # k
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -376,8 +385,8 @@ class TestRCReporterDistanceCalculations:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             rc = float(values[1])
             dist_ik = float(values[2])
@@ -393,7 +402,7 @@ class TestRCReporterDistanceCalculations:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -407,11 +416,13 @@ class TestRCReporterDistanceCalculations:
 
             # 3D positions
             # i at origin, j at (1,1,1), k at (0.5,0.5,0.5)
-            positions = np.array([
-                [0.0, 0.0, 0.0],
-                [1.0, 1.0, 1.0],
-                [0.5, 0.5, 0.5],
-            ])
+            positions = np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.0, 1.0, 1.0],
+                    [0.5, 0.5, 0.5],
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -419,8 +430,8 @@ class TestRCReporterDistanceCalculations:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             dist_ik = float(values[2])
             dist_jk = float(values[3])
@@ -440,7 +451,7 @@ class TestRCReporterDistanceCalculations:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -456,11 +467,13 @@ class TestRCReporterDistanceCalculations:
             # i at (0,0,0), j at (1,0,0), k at (0.8,0,0)
             # dist_ik = 0.8, dist_jk = 0.2
             # rc = 0.8 - 0.2 = 0.6
-            positions = np.array([
-                [0.0, 0.0, 0.0],
-                [1.0, 0.0, 0.0],
-                [0.8, 0.0, 0.0],
-            ])
+            positions = np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [0.8, 0.0, 0.0],
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -468,8 +481,8 @@ class TestRCReporterDistanceCalculations:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             rc = float(values[1])
             assert rc == pytest.approx(0.6, rel=1e-5)
@@ -480,7 +493,7 @@ class TestRCReporterDistanceCalculations:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -496,11 +509,13 @@ class TestRCReporterDistanceCalculations:
             # i at (0,0,0), j at (1,0,0), k at (0.2,0,0)
             # dist_ik = 0.2, dist_jk = 0.8
             # rc = 0.2 - 0.8 = -0.6
-            positions = np.array([
-                [0.0, 0.0, 0.0],
-                [1.0, 0.0, 0.0],
-                [0.2, 0.0, 0.0],
-            ])
+            positions = np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [0.2, 0.0, 0.0],
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -508,8 +523,8 @@ class TestRCReporterDistanceCalculations:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             rc = float(values[1])
             assert rc == pytest.approx(-0.6, rel=1e-5)
@@ -524,7 +539,7 @@ class TestRCReporterCleanup:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -552,7 +567,7 @@ class TestRCReporterEdgeCases:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -565,11 +580,13 @@ class TestRCReporterEdgeCases:
             mock_state = MagicMock()
 
             # All atoms at same position
-            positions = np.array([
-                [0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0],
-            ])
+            positions = np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -578,8 +595,8 @@ class TestRCReporterEdgeCases:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             # All distances should be 0
             assert float(values[1]) == 0.0  # rc
@@ -592,7 +609,7 @@ class TestRCReporterEdgeCases:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -605,11 +622,13 @@ class TestRCReporterEdgeCases:
             mock_state = MagicMock()
 
             # Large coordinate values (e.g., far from origin)
-            positions = np.array([
-                [1000.0, 1000.0, 1000.0],
-                [1001.0, 1000.0, 1000.0],
-                [1000.5, 1000.0, 1000.0],
-            ])
+            positions = np.array(
+                [
+                    [1000.0, 1000.0, 1000.0],
+                    [1001.0, 1000.0, 1000.0],
+                    [1000.5, 1000.0, 1000.0],
+                ]
+            )
             mock_state.getPositions.return_value = positions
             mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -617,8 +636,8 @@ class TestRCReporterEdgeCases:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             # Distances should be correct despite large absolute positions
             assert float(values[2]) == pytest.approx(0.5, rel=1e-5)  # dist_ik
@@ -631,7 +650,7 @@ class TestRCReporterEdgeCases:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -682,7 +701,7 @@ class TestRCReporterParametrized:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_test.log'
+            rc_file = path / "rc_test.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -700,8 +719,8 @@ class TestRCReporterParametrized:
             reporter.file.close()
 
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
-            values = lines[1].split(',')
+            lines = content.strip().split("\n")
+            values = lines[1].split(",")
 
             rc = float(values[1])
             assert rc == pytest.approx(expected_rc, rel=1e-5)
@@ -720,7 +739,7 @@ class TestRCReporterIntegration:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir)
-            rc_file = path / 'rc_workflow.log'
+            rc_file = path / "rc_workflow.log"
 
             reporter = RCReporter(
                 file=rc_file,
@@ -737,11 +756,13 @@ class TestRCReporterIntegration:
                 mock_state = MagicMock()
                 # k position interpolates from near i to near j
                 k_pos = 0.1 + frame * 0.08  # 0.1 to 0.82
-                positions = np.array([
-                    [0.0, 0.0, 0.0],   # i (donor)
-                    [1.0, 0.0, 0.0],   # j (acceptor)
-                    [k_pos, 0.0, 0.0], # k (transferring atom)
-                ])
+                positions = np.array(
+                    [
+                        [0.0, 0.0, 0.0],  # i (donor)
+                        [1.0, 0.0, 0.0],  # j (acceptor)
+                        [k_pos, 0.0, 0.0],  # k (transferring atom)
+                    ]
+                )
                 mock_state.getPositions.return_value = positions
                 mock_state.getPeriodicBoxVectors.return_value = np.eye(3)
 
@@ -751,14 +772,14 @@ class TestRCReporterIntegration:
 
             # Verify output
             content = rc_file.read_text()
-            lines = content.strip().split('\n')
+            lines = content.strip().split("\n")
 
             assert len(lines) == n_frames + 1  # header + data
 
             # Check that RC values progress correctly
             rc_values = []
             for line in lines[1:]:
-                values = line.split(',')
+                values = line.split(",")
                 rc_values.append(float(values[1]))
 
             # RC should go from negative to positive as k moves from i to j
@@ -767,7 +788,7 @@ class TestRCReporterIntegration:
 
             # All rc0 values should be the target
             for line in lines[1:]:
-                values = line.split(',')
+                values = line.split(",")
                 assert float(values[0]) == -0.2
 
 

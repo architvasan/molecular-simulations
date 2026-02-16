@@ -1,3 +1,4 @@
+# ruff: noqa: B006, B008
 """Constant pH molecular dynamics simulations using OpenMM.
 
 This module provides classes and functions for running constant pH simulations
@@ -5,30 +6,32 @@ with replica exchange across different pH values. It uses Parsl for distributed
 execution of simulation replicas.
 """
 
-from datetime import datetime
-import json
 import logging
+from collections.abc import Callable
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
 import MDAnalysis as mda
 import numpy as np
-from openmm.app import (AmberPrmtopFile,
-                        AmberInpcrdFile,
-                        PDBFile, 
-                        Topology)
 import parsl
+from openmm.app import AmberInpcrdFile, AmberPrmtopFile, Topology
 from parsl import Config, python_app
-from pathlib import Path
-from typing import Any, Callable, Optional
-import uuid
+from pythonjsonlogger.json import JsonFormatter
+
 from .constantph.constantph import ConstantPH
 from .constantph.logging import setup_task_logger
 
+
 @python_app
-def run_cph_sim(params: dict[str, Any],
-                temperature: float,
-                n_cycles: int,
-                n_steps: int,
-                log_params: dict[str, str],
-                path: str) -> None:
+def run_cph_sim(
+    params: dict[str, Any],
+    temperature: float,
+    n_cycles: int,
+    n_steps: int,
+    log_params: dict[str, str],
+    path: str,
+) -> None:
     """Run a constant pH simulation as a Parsl python app.
 
     This function executes a single constant pH simulation replica,
@@ -45,22 +48,26 @@ def run_cph_sim(params: dict[str, Any],
         path: Path to the simulation directory for logging purposes.
     """
     from openmm import LangevinIntegrator
-    from openmm.app import CutoffNonPeriodic, HBonds, PME
-    from openmm.unit import amu, kelvin, kilojoules_per_mole, picosecond, nanometers
+    from openmm.app import PME, CutoffNonPeriodic, HBonds
+    from openmm.unit import amu, kelvin, kilojoules_per_mole, nanometers, picosecond
 
     variants = params['residueVariants']
 
     logger = setup_task_logger(**log_params)
-    
+
     # build OpenMM stuff here to avoid serializing SWIG objects (bad idea)
     temp = temperature * kelvin
-    expl_params = dict(nonbondedMethod=PME,
-                       nonbondedCutoff=params['nonbonded_cutoff']*nanometers,
-                       constraints=HBonds,
-                       hydrogenMass=params['hmr']*amu)
-    impl_params = dict(nonbondedMethod=CutoffNonPeriodic,
-                                  nonbondedCutoff=params['implicit_cutoff']*nanometers,
-                                  constraints=HBonds)
+    expl_params = dict(
+        nonbondedMethod=PME,
+        nonbondedCutoff=params['nonbonded_cutoff'] * nanometers,
+        constraints=HBonds,
+        hydrogenMass=params['hmr'] * amu,
+    )
+    impl_params = dict(
+        nonbondedMethod=CutoffNonPeriodic,
+        nonbondedCutoff=params['implicit_cutoff'] * nanometers,
+        constraints=HBonds,
+    )
 
     reference_energies = params['referenceEnergies']
     for key, vals in reference_energies.items():
@@ -73,8 +80,10 @@ def run_cph_sim(params: dict[str, Any],
         'relaxationSteps': params['relaxationSteps'],
         'explicitArgs': expl_params,
         'implicitArgs': impl_params,
-        'integrator': LangevinIntegrator(temp, 1./picosecond, 0.004*picosecond),
-        'relaxationIntegrator': LangevinIntegrator(temp, 10.0/picosecond, 0.002*picosecond),
+        'integrator': LangevinIntegrator(temp, 1.0 / picosecond, 0.004 * picosecond),
+        'relaxationIntegrator': LangevinIntegrator(
+            temp, 10.0 / picosecond, 0.002 * picosecond
+        ),
         'residueVariants': variants,
         'referenceEnergies': reference_energies,
     }
@@ -84,21 +93,25 @@ def run_cph_sim(params: dict[str, Any],
     cph.simulation.context.setVelocitiesToTemperature(temperature)
 
     resids = list(variants.keys())
-    
-    logger.info(f'Running {n_cycles} cycles of constant pH simulation!',
-                extra={'path': path, 'pH': None, 'step': None, 'resids': resids})
+
+    logger.info(
+        f'Running {n_cycles} cycles of constant pH simulation!',
+        extra={'path': path, 'pH': None, 'step': None, 'resids': resids},
+    )
     for i in range(n_cycles):
         cph.simulation.step(n_steps)
         cph.attemptMCStep(temperature)
         pH = cph.pH[cph.currentPHIndex]
-        current_variants = [variants[index][cph.titrations[index].currentIndex] 
-                            for index in variants]
-        logger.info(f'Step complete {i}!',
-                    extra={'path': path, 'pH': pH, 'step': i, 'resnames': current_variants})
+        current_variants = [
+            variants[index][cph.titrations[index].currentIndex] for index in variants
+        ]
+        logger.info(
+            f'Step complete {i}!',
+            extra={'path': path, 'pH': pH, 'step': i, 'resnames': current_variants},
+        )
 
-def setup_worker_logger(self,
-                        worker_id: str,
-                        log_dir: Path) -> logging.Logger:
+
+def setup_worker_logger(self, worker_id: str, log_dir: Path) -> logging.Logger:
     """Set up a JSON logger for a simulation worker.
 
     Creates a logger that writes JSON-formatted log entries to a
@@ -112,7 +125,7 @@ def setup_worker_logger(self,
         Configured logging.Logger instance for the worker.
     """
     log_path = log_dir / f'{worker_id}.jsonl'
-    
+
     logger = logging.getLogger(f'task.{task_id}')
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
@@ -123,6 +136,7 @@ def setup_worker_logger(self,
 
     return logger
 
+
 class ConstantPHEnsemble:
     """Orchestrator for running constant pH simulation ensembles.
 
@@ -131,16 +145,18 @@ class ConstantPHEnsemble:
     Monte Carlo titration moves.
     """
 
-    def __init__(self,
-                 paths: list[Path],
-                 reference_energies: dict[str, list[float]],
-                 log_dir: Path | list[Path],
-                 pHs: list[float]=[x+0.5 for x in range(14)],
-                 temperature: float=300.,
-                 platform: str='CUDA',
-                 properties: dict[str, str]={'Precision': 'mixed'},
-                 parsl_config: Optional[Config]=None,
-                 variant_sel: Optional[str]=None,):
+    def __init__(
+        self,
+        paths: list[Path],
+        reference_energies: dict[str, list[float]],
+        log_dir: Path | list[Path],
+        pHs: list[float] = [x + 0.5 for x in range(14)],
+        temperature: float = 300.0,
+        platform: str = 'CUDA',
+        properties: dict[str, str] = {'Precision': 'mixed'},
+        parsl_config: Config | None = None,
+        variant_sel: str | None = None,
+    ):
         """Initialize the constant pH ensemble.
 
         Args:
@@ -182,8 +198,7 @@ class ConstantPHEnsemble:
             self.dfk = None
         parsl.clear()
 
-    def load_files(self,
-                   path: Path) -> tuple[Topology, np.ndarray]:
+    def load_files(self, path: Path) -> tuple[Topology, np.ndarray]:
         """Load topology and coordinates from AMBER files.
 
         Args:
@@ -197,10 +212,9 @@ class ConstantPHEnsemble:
 
         return prmtop.topology, inpcrd.positions
 
-    def build_dicts(self,
-                    path: Path,
-                    top: Topology) -> tuple[dict[str, list[str]],
-                                            dict[int, list[float]]]:
+    def build_dicts(
+        self, path: Path, top: Topology
+    ) -> tuple[dict[str, list[str]], dict[int, list[float]]]:
         """Build residue variant and reference energy dictionaries.
 
         Identifies titratable residues in the topology and maps them to
@@ -229,31 +243,34 @@ class ConstantPHEnsemble:
         for residue in top.residues():
             if residue.name in names:
                 variants[residue.index] = _variants[residue.name]
-                reference_energies[residue.index] = [x 
-                                                     for x in self.ref_energies[residue.name]]
-        
+                reference_energies[residue.index] = [
+                    x for x in self.ref_energies[residue.name]
+                ]
+
         u = mda.Universe(str(path / 'system.prmtop'), str(path / 'system.inpcrd'))
         sel = u.select_atoms('protein')
-        bad_keys = [sel[0].resindex, sel[-1].resindex] # termini
-        
+        bad_keys = [sel[0].resindex, sel[-1].resindex]  # termini
+
         if self.variant_sel is not None:
             var = u.select_atoms(self.variant_sel)
-            bad_keys = [resid 
-                        for resid in sel.residues.resindices 
-                        if resid not in var.residues.resindices]
+            bad_keys = [
+                resid
+                for resid in sel.residues.resindices
+                if resid not in var.residues.resindices
+            ]
 
         for bad_key in bad_keys:
-            if bad_key in variants:
-                del variants[bad_key]
-            if bad_key in reference_energies:
-                del reference_energies[bad_key]
-    
+            variants.pop(bad_key, None)
+            reference_energies.pop(bad_key, None)
+
         return variants, reference_energies
-    
-    def run(self,
-            n_cycles: int=500,
-            n_steps: int=500,
-            parsl_func: Callable=run_cph_sim) -> dict:
+
+    def run(
+        self,
+        n_cycles: int = 500,
+        n_steps: int = 500,
+        parsl_func: Callable = run_cph_sim,
+    ) -> dict:
         """Run the constant pH simulation ensemble.
 
         Distributes simulation replicas across available resources using
@@ -267,15 +284,17 @@ class ConstantPHEnsemble:
         """
         futures = []
         for i, path in enumerate(self.paths):
-            top, pos = self.load_files(path)
+            top, _ = self.load_files(path)
             variants, reference_energies = self.build_dicts(path, top)
 
             cph_params = self.get_params(path)
 
-            cph_params.update({
-                'residueVariants': variants, 
-                'referenceEnergies': reference_energies,
-            })
+            cph_params.update(
+                {
+                    'residueVariants': variants,
+                    'referenceEnergies': reference_energies,
+                }
+            )
 
             if isinstance(self.log_dir, list):
                 log_dir = self.log_dir[i]
@@ -287,21 +306,28 @@ class ConstantPHEnsemble:
                 'task_id': f'{i:05d}',
                 'log_dir': log_dir,
             }
-    
+
             futures.append(
-                parsl_func(cph_params, self.temperature, n_cycles, n_steps, log_params, str(path))
+                parsl_func(
+                    cph_params,
+                    self.temperature,
+                    n_cycles,
+                    n_steps,
+                    log_params,
+                    str(path),
+                )
             )
 
         results = {}
         for i, future in enumerate(futures):
             try:
                 future.result()
-                results[i] = None # Success
+                results[i] = None  # Success
             except Exception as e:
-                results[i] = e # Failure
+                results[i] = e  # Failure
 
         return results
-    
+
     def get_params(self, path: Path) -> dict[str, Any]:
         """Build the parameter dictionary for ConstantPH initialization.
 

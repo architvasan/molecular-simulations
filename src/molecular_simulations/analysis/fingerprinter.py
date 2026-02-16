@@ -5,13 +5,14 @@ binder chains in molecular structures, computing both electrostatic and
 Lennard-Jones contributions at the residue level.
 """
 
-import openmm
-from openmm.app import AmberPrmtopFile
-import MDAnalysis as mda
-from numba import njit
-import numpy as np
 from pathlib import Path
 from typing import Union
+
+import MDAnalysis as mda
+import numpy as np
+import openmm
+from numba import njit
+from openmm.app import AmberPrmtopFile
 
 OptPath = Union[Path, str, None]
 PathLike = Union[Path, str]
@@ -56,7 +57,7 @@ def _dist_mat(xyz1: np.ndarray, xyz2: np.ndarray) -> np.ndarray:
     n1 = xyz1.shape[0]
     n2 = xyz2.shape[0]
     ndim = xyz1.shape[1]
-    dist_mat = np.zeros((n1 * n2))
+    dist_mat = np.zeros(n1 * n2)
     i, j = unravel_index(n1, n2)
     for k in range(n1 * n2):
         dr = xyz1[i[k]] - xyz2[j[k]]
@@ -83,11 +84,7 @@ def dist_mat(xyz1: np.ndarray, xyz2: np.ndarray) -> np.ndarray:
 
 
 @njit
-def electrostatic(
-    distance: float,
-    charge_i: float, 
-    charge_j: float
-) -> float:
+def electrostatic(distance: float, charge_i: float, charge_j: float) -> float:
     """Calculate electrostatic energy between two particles.
 
     Uses the reaction field method with a 10 Å cutoff and a solvent
@@ -109,25 +106,25 @@ def electrostatic(
         - 1/(4*pi*epsilon_0) = 8.988e9 J*m/C^2
     """
     solvent_dielectric = 78.5
-    
-    if distance > 1.:
-        energy = 0.
+
+    if distance > 1.0:
+        energy = 0.0
     else:
         r = distance * 1e-9
-        r_cutoff = 1. * 1e-9
-        k_rf = 1 / (r_cutoff ** 3) * (solvent_dielectric - 1) / (2 * solvent_dielectric + 1)
+        r_cutoff = 1.0 * 1e-9
+        k_rf = (
+            1 / (r_cutoff**3) * (solvent_dielectric - 1) / (2 * solvent_dielectric + 1)
+        )
         c_rf = 1 / r_cutoff * (3 * solvent_dielectric) / (2 * solvent_dielectric + 1)
 
         outer_term = 8.988e9 * (charge_i * 1.602e-19) * (charge_j * 1.602e-19)
-        energy = outer_term * (1 / r + k_rf * r ** 2 - c_rf) * 6.022e23
+        energy = outer_term * (1 / r + k_rf * r**2 - c_rf) * 6.022e23
     return energy / 1000  # J -> kJ
 
 
 @njit
 def electrostatic_sum(
-    distances: np.ndarray,
-    charge_is: np.ndarray, 
-    charge_js: np.ndarray
+    distances: np.ndarray, charge_is: np.ndarray, charge_js: np.ndarray
 ) -> float:
     """Calculate sum of all electrostatic interactions between two groups.
 
@@ -143,24 +140,16 @@ def electrostatic_sum(
     n = distances.shape[0]
     m = distances.shape[1]
 
-    energy = 0.
+    energy = 0.0
     for i in range(n):
         for j in range(m):
-            energy += electrostatic(
-                distances[i, j],
-                charge_is[i],
-                charge_js[j]
-            )
+            energy += electrostatic(distances[i, j], charge_is[i], charge_js[j])
     return energy
 
 
 @njit
 def lennard_jones(
-    distance: float, 
-    sigma_i: float, 
-    sigma_j: float,
-    epsilon_i: float, 
-    epsilon_j: float
+    distance: float, sigma_i: float, sigma_j: float, epsilon_i: float, epsilon_j: float
 ) -> float:
     """Calculate Lennard-Jones energy between two particles.
 
@@ -177,27 +166,27 @@ def lennard_jones(
         Lennard-Jones interaction energy in kJ/mol.
     """
     if distance > 1.2:
-        energy = 0.
+        energy = 0.0
     else:
         # Use Lorentz-Berthelot combining rules
         sigma_ij = 0.5 * (sigma_i + sigma_j)
-        epsilon_ij = np.sqrt(epsilon_i * epsilon_j) 
-    
+        epsilon_ij = np.sqrt(epsilon_i * epsilon_j)
+
         # Calculate energy
         sigma_r = sigma_ij / distance
-        sigma_r_6 = sigma_r ** 6
-        sigma_r_12 = sigma_r_6 ** 2
-        energy = 4. * epsilon_ij * (sigma_r_12 - sigma_r_6)
+        sigma_r_6 = sigma_r**6
+        sigma_r_12 = sigma_r_6**2
+        energy = 4.0 * epsilon_ij * (sigma_r_12 - sigma_r_6)
     return energy
 
 
 @njit
 def lennard_jones_sum(
     distances: np.ndarray,
-    sigma_is: np.ndarray, 
+    sigma_is: np.ndarray,
     sigma_js: np.ndarray,
-    epsilon_is: np.ndarray, 
-    epsilon_js: np.ndarray
+    epsilon_is: np.ndarray,
+    epsilon_js: np.ndarray,
 ) -> float:
     """Calculate sum of all LJ interactions between two groups.
 
@@ -214,25 +203,23 @@ def lennard_jones_sum(
     """
     n = distances.shape[0]
     m = distances.shape[1]
-    energy = 0.
+    energy = 0.0
     for i in range(n):
         for j in range(m):
             energy += lennard_jones(
-                distances[i, j], 
-                sigma_is[i], sigma_js[j],
-                epsilon_is[i], epsilon_js[j]
+                distances[i, j], sigma_is[i], sigma_js[j], epsilon_is[i], epsilon_js[j]
             )
     return energy
 
 
 @njit
 def fingerprints(
-    xyzs: np.ndarray, 
-    charges: np.ndarray, 
-    sigmas: np.ndarray, 
+    xyzs: np.ndarray,
+    charges: np.ndarray,
+    sigmas: np.ndarray,
     epsilons: np.ndarray,
-    target_resmap: list, 
-    binder_inds: np.ndarray
+    target_resmap: list,
+    binder_inds: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Calculate per-residue interaction fingerprints.
 
@@ -254,21 +241,19 @@ def fingerprints(
         energies.
     """
     n_target_residues = len(target_resmap)
-    es_fingerprint = np.zeros((n_target_residues))
-    lj_fingerprint = np.zeros((n_target_residues))
+    es_fingerprint = np.zeros(n_target_residues)
+    lj_fingerprint = np.zeros(n_target_residues)
     for i in range(n_target_residues):
         dists = dist_mat(xyzs[target_resmap[i]], xyzs[binder_inds])
         es_fingerprint[i] = electrostatic_sum(
-            dists,
-            charges[target_resmap[i]],
-            charges[binder_inds]
+            dists, charges[target_resmap[i]], charges[binder_inds]
         )
         lj_fingerprint[i] = lennard_jones_sum(
             dists,
             sigmas[target_resmap[i]],
             sigmas[binder_inds],
             epsilons[target_resmap[i]],
-            epsilons[binder_inds]
+            epsilons[binder_inds],
         )
     return lj_fingerprint, es_fingerprint
 
@@ -301,7 +286,7 @@ class Fingerprinter:
         out_name: Output filename. If None, uses 'fingerprint.npz'.
 
     Example:
-        >>> fp = Fingerprinter('complex.prmtop', 'traj.dcd')
+        >>> fp = Fingerprinter("complex.prmtop", "traj.dcd")
         >>> fp.run()
         >>> fp.save()
     """
@@ -310,10 +295,10 @@ class Fingerprinter:
         self,
         topology: PathLike,
         trajectory: OptPath = None,
-        target_selection: str = 'segid A',
+        target_selection: str = "segid A",
         binder_selection: str | None = None,
         out_path: OptPath = None,
-        out_name: str | None = None
+        out_name: str | None = None,
     ):
         """Initialize the Fingerprinter.
 
@@ -332,7 +317,7 @@ class Fingerprinter:
         if binder_selection is not None:
             self.binder_selection = binder_selection
         else:
-            self.binder_selection = f'not {target_selection}'
+            self.binder_selection = f"not {target_selection}"
 
         if out_path is None:
             path = self.topology.parent
@@ -340,7 +325,7 @@ class Fingerprinter:
             path = Path(out_path)
 
         if out_name is None:
-            self.out = path / 'fingerprint.npz'
+            self.out = path / "fingerprint.npz"
         else:
             self.out = path / out_name
 
@@ -353,14 +338,13 @@ class Fingerprinter:
         system = AmberPrmtopFile(self.topology).createSystem()
 
         nonbonded = [
-            f for f in system.getForces() 
-            if isinstance(f, openmm.NonbondedForce)
+            f for f in system.getForces() if isinstance(f, openmm.NonbondedForce)
         ][0]
-        
-        self.epsilons = np.zeros((system.getNumParticles()))
-        self.sigmas = np.zeros((system.getNumParticles()))
-        self.charges = np.zeros((system.getNumParticles()))
-        
+
+        self.epsilons = np.zeros(system.getNumParticles())
+        self.sigmas = np.zeros(system.getNumParticles())
+        self.charges = np.zeros(system.getNumParticles())
+
         for ind in range(system.getNumParticles()):
             charge, sigma, epsilon = nonbonded.getParticleParameters(ind)
             self.charges[ind] = charge / charge.unit  # elementary charge
@@ -374,15 +358,15 @@ class Fingerprinter:
         will look for inpcrd or rst7 coordinates if trajectory was not
         specified.
         """
-        if self.topology.suffix == '.pdb':
+        if self.topology.suffix == ".pdb":
             self.u = mda.Universe(self.topology)
         else:
             if self.trajectory is not None:
                 coordinates = self.trajectory
-            elif self.topology.with_suffix('.inpcrd').exists():
-                coordinates = self.topology.with_suffix('.inpcrd')
+            elif self.topology.with_suffix(".inpcrd").exists():
+                coordinates = self.topology.with_suffix(".inpcrd")
             else:
-                coordinates = self.topology.with_suffix('.rst7')
+                coordinates = self.topology.with_suffix(".rst7")
 
             self.u = mda.Universe(self.topology, coordinates)
 
@@ -406,13 +390,13 @@ class Fingerprinter:
         Initializes fingerprint arrays and iterates through all
         frames, calculating fingerprints for each.
         """
-        self.target_fingerprint = np.zeros((
-            len(self.u.trajectory), len(self.target_resmap), 2
-        ))
+        self.target_fingerprint = np.zeros(
+            (len(self.u.trajectory), len(self.target_resmap), 2)
+        )
 
-        self.binder_fingerprint = np.zeros((
-            len(self.u.trajectory), len(self.binder_resmap), 2
-        ))
+        self.binder_fingerprint = np.zeros(
+            (len(self.u.trajectory), len(self.binder_resmap), 2)
+        )
 
         for i, ts in enumerate(self.u.trajectory):
             self.calculate_fingerprints(i)
@@ -424,14 +408,16 @@ class Fingerprinter:
             frame_index: Index of the current frame (may differ from
                 frame number if trajectory is discontinuous).
         """
-        positions = self.u.atoms.positions * .1  # convert to nm
-        
+        positions = self.u.atoms.positions * 0.1  # convert to nm
+
         self.target_fingerprint[frame_index] = np.vstack(
             fingerprints(
                 positions,
                 self.charges,
-                self.sigmas, self.epsilons,
-                self.target_resmap, self.binder_inds
+                self.sigmas,
+                self.epsilons,
+                self.target_resmap,
+                self.binder_inds,
             )
         ).T
 
@@ -439,11 +425,13 @@ class Fingerprinter:
             fingerprints(
                 positions,
                 self.charges,
-                self.sigmas, self.epsilons,
-                self.binder_resmap, self.target_inds
+                self.sigmas,
+                self.epsilons,
+                self.binder_resmap,
+                self.target_inds,
             )
         ).T
-    
+
     def run(self) -> None:
         """Execute the complete fingerprinting workflow.
 
@@ -463,7 +451,5 @@ class Fingerprinter:
         output path.
         """
         np.savez(
-            self.out, 
-            target=self.target_fingerprint, 
-            binder=self.binder_fingerprint
+            self.out, target=self.target_fingerprint, binder=self.binder_fingerprint
         )
