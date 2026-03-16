@@ -116,5 +116,3 @@ known-first-party = ['molecular_simulations']
 docstring-code-format = true
 
 [tool.ty]
-python-version = '3.10'
-src = ['src']

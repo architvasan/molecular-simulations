@@ -14,12 +14,12 @@ from parsl.providers import LocalProvider, PBSProProvider
 from pydantic import BaseModel
 
 PathLike = str | Path
-_T = TypeVar("_T")
+_T = TypeVar('_T')
 
 
 class BaseSettings(BaseModel):
     def dump_yaml(self, filename: PathLike) -> None:
-        with open(filename, mode="w") as fp:
+        with open(filename, mode='w') as fp:
             yaml.dump(json.loads(self.model_dump_json()), fp, indent=4, sort_keys=False)
 
     @classmethod
@@ -41,15 +41,15 @@ class BaseComputeSettings(ABC, BaseSettings):
 
 class LocalSettings(BaseComputeSettings):
     available_accelerators: int | Sequence[str] = 4
-    worker_init: str = ""
+    worker_init: str = ''
     nodes: int = 1
     retries: int = 1
-    label: str = "gpu"
+    label: str = 'gpu'
     worker_port_range: tuple[int, int] = (10000, 20000)
 
     def config_factory(self, run_dir: PathLike) -> Config:
         return Config(
-            run_dir=str(run_dir / "runinfo"),
+            run_dir=str(run_dir / 'runinfo'),
             retries=self.retries,
             executors=[
                 HighThroughputExecutor(
@@ -58,12 +58,12 @@ class LocalSettings(BaseComputeSettings):
                         init_blocks=1,
                         max_blocks=1,
                         launcher=MpiExecLauncher(
-                            bind_cmd="--cpu-bind", overrides="--depth=1 --ppn 1"
+                            bind_cmd='--cpu-bind', overrides='--depth=1 --ppn 1'
                         ),
                         worker_init=self.worker_init,
                     ),
                     label=self.label,
-                    cpu_affinity="block",
+                    cpu_affinity='block',
                     available_accelerators=self.available_accelerators,
                     worker_port_range=self.worker_port_range,
                 ),
@@ -72,18 +72,18 @@ class LocalSettings(BaseComputeSettings):
 
 
 class LocalCPUSettings(BaseComputeSettings):
-    worker_init: str = ""
+    worker_init: str = ''
     nodes: int = 1
     max_workers_per_node: int = 1
     cores_per_worker: float = 1.0
     retries: int = 1
-    label: str = "cpu"
+    label: str = 'cpu'
     worker_port_range: tuple[int, int] = (10000, 20000)
     available_accelerators: int | Sequence[str] = []
 
     def config_factory(self, run_dir: PathLike) -> Config:
         return Config(
-            run_dir=str(run_dir / "runinfo"),
+            run_dir=str(run_dir / 'runinfo'),
             retries=self.retries,
             executors=[
                 HighThroughputExecutor(
@@ -92,7 +92,7 @@ class LocalCPUSettings(BaseComputeSettings):
                         init_blocks=1,
                         max_blocks=1,
                         launcher=MpiExecLauncher(
-                            bind_cmd="--cpu-bind", overrides="--depth=1 --ppn 1"
+                            bind_cmd='--cpu-bind', overrides='--depth=1 --ppn 1'
                         ),
                         worker_init=self.worker_init,
                     ),
@@ -106,15 +106,15 @@ class LocalCPUSettings(BaseComputeSettings):
 
 
 class PolarisSettings(BaseComputeSettings):
-    label: str = "htex"
+    label: str = 'htex'
     num_nodes: int = 1
-    worker_init: str = ""
-    scheduler_options: str = ""
+    worker_init: str = ''
+    scheduler_options: str = ''
     account: str
     queue: str
     walltime: str
     cpus_per_node: int = 64
-    strategy: str = "simple"
+    strategy: str = 'simple'
     available_accelerators: int | Sequence[str] = 4
 
     def config_factory(self, run_dir: PathLike) -> Config:
@@ -135,15 +135,15 @@ class PolarisSettings(BaseComputeSettings):
                     worker_debug=True,
                     available_accelerators=self.available_accelerators,
                     address=address_by_hostname(),
-                    cpu_affinity="alternating",
+                    cpu_affinity='alternating',
                     prefetch_capacity=0,  # Increase if you have many more tasks than workers
                     provider=PBSProProvider(  # type: ignore[no-untyped-call]
                         launcher=MpiExecLauncher(
-                            bind_cmd="--cpu-bind", overrides="--depth=64 --ppn 1"
+                            bind_cmd='--cpu-bind', overrides='--depth=64 --ppn 1'
                         ),  # Updates to the mpiexec command
                         account=self.account,
                         queue=self.queue,
-                        select_options="ngpus=4",
+                        select_options='ngpus=4',
                         # PBS directives (header lines): for array jobs pass '-J' option
                         scheduler_options=self.scheduler_options,
                         worker_init=self.worker_init,
@@ -163,16 +163,16 @@ class PolarisSettings(BaseComputeSettings):
 
 
 class AuroraSettings(BaseComputeSettings):
-    label: str = "htex"
-    worker_init: str = ""
+    label: str = 'htex'
+    worker_init: str = ''
     num_nodes: int = 1
-    scheduler_options: str = ""
+    scheduler_options: str = ''
     account: str
     queue: str
     walltime: str
     retries: int = 0
     cpus_per_node: int = 48  # only 4 cpus per OpenMM job
-    strategy: str = "simple"
+    strategy: str = 'simple'
     available_accelerators: list[str] = [str(i) for i in range(12)]
 
     def config_factory(self, run_dir: PathLike) -> Config:
@@ -182,7 +182,7 @@ class AuroraSettings(BaseComputeSettings):
                 HighThroughputExecutor(
                     label=self.label,
                     available_accelerators=self.available_accelerators,
-                    cpu_affinity="block",  # Assigns cpus in sequential order
+                    cpu_affinity='block',  # Assigns cpus in sequential order
                     prefetch_capacity=0,
                     max_workers=12,
                     cores_per_worker=16,
@@ -191,7 +191,7 @@ class AuroraSettings(BaseComputeSettings):
                     worker_debug=False,
                     provider=PBSProProvider(
                         launcher=MpiExecLauncher(
-                            bind_cmd="--cpu-bind", overrides="--depth=208 --ppn 1"
+                            bind_cmd='--cpu-bind', overrides='--depth=208 --ppn 1'
                         ),  # Ensures 1 manger per node and allows it to divide work among all 208 threads
                         worker_init=self.worker_init,
                         nodes_per_block=self.num_nodes,
@@ -202,7 +202,7 @@ class AuroraSettings(BaseComputeSettings):
                 ),
             ],
             run_dir=str(run_dir),
-            checkpoint_mode="task_exit",
+            checkpoint_mode='task_exit',
             retries=self.retries,
             app_cache=True,
         )

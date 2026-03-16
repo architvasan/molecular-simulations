@@ -22,9 +22,9 @@ import polars as pl
 
 # Thread settings for higher level parallelism (Parsl/Academy)
 # Must be set BEFORE importing numpy
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
 import numpy as np
 
 PathLike = Path | str
@@ -48,7 +48,7 @@ def _run_energy_calculation(
         Tuple of (output_path, success_bool, error_message).
     """
     mmpbsa_binary, mdin, prm, pdb, trj, out, cwd = args
-    cmd = f"{mmpbsa_binary} -O -i {mdin} -p {prm} -c {pdb} -y {trj} -o {out}"
+    cmd = f'{mmpbsa_binary} -O -i {mdin} -p {prm} -c {pdb} -y {trj} -o {out}'
 
     expected_output = Path(cwd) / out
 
@@ -61,26 +61,26 @@ def _run_energy_calculation(
             if expected_output.exists() and expected_output.stat().st_size > 0:
                 with open(expected_output) as f:
                     content = f.read()
-                    if " BOND" in content:
-                        return (out, True, "")
+                    if ' BOND' in content:
+                        return (out, True, '')
                     else:
-                        error = "Output file exists but contains no energy data"
+                        error = 'Output file exists but contains no energy data'
             else:
-                error = "Output file missing or empty after subprocess complete"
+                error = 'Output file missing or empty after subprocess complete'
 
             if result.returncode != 0:
-                error = f"Return code: {result.returncode}: {result.stderr or result.stdout}"
+                error = f'Return code: {result.returncode}: {result.stderr or result.stdout}'
 
         except subprocess.TimeoutExpired:
-            error = "Calculation timed out"
+            error = 'Calculation timed out'
         except Exception as e:
-            error = f"Exception: {e}"
+            error = f'Exception: {e}'
 
         if attempt < max_retries - 1:
             logger.warning(
-                f"Energy calculation {out} failed (attempt {attempt + 1}/{max_retries})"
+                f'Energy calculation {out} failed (attempt {attempt + 1}/{max_retries})'
             )
-            logger.warning(f"Error: {error}")
+            logger.warning(f'Error: {error}')
             time.sleep(2**attempt)
 
     return (out, False, error)
@@ -107,14 +107,14 @@ def _run_sasa_calculation(
     with open(script_path) as f:
         script_content = f.read()
 
-    match = re.search(r"molsurf\s+.*?\s+out\s+(\S+)", script_content)
+    match = re.search(r'molsurf\s+.*?\s+out\s+(\S+)', script_content)
 
     expected_output = Path(cwd) / match.group(1) if match else None
 
     for attempt in range(max_retries):
         try:
             result = subprocess.run(
-                f"{cpptraj_binary} -i {sasa_script}",
+                f'{cpptraj_binary} -i {sasa_script}',
                 shell=True,
                 cwd=str(cwd),
                 capture_output=True,
@@ -127,30 +127,30 @@ def _run_sasa_calculation(
                         data_lines = [
                             line
                             for line in lines
-                            if line.strip() and not line.strip().startswith("#")
+                            if line.strip() and not line.strip().startswith('#')
                         ]
                         if len(data_lines) > 0:
-                            return (sasa_script, True, "")
+                            return (sasa_script, True, '')
                         else:
-                            error = "Output file has no data lines"
+                            error = 'Output file has no data lines'
                 else:
-                    error = "Expected output file is empty"
+                    error = 'Expected output file is empty'
             else:
-                error = f"Expected output file not found: {expected_output}"
+                error = f'Expected output file not found: {expected_output}'
 
             if result.returncode != 0:
                 error = (
-                    f"Return code {result.returncode}: {result.stderr or result.stdout}"
+                    f'Return code {result.returncode}: {result.stderr or result.stdout}'
                 )
 
         except subprocess.TimeoutExpired:
-            error = "Calculation timed out"
+            error = 'Calculation timed out'
         except Exception as e:
-            error = f"Exception: {e}"
+            error = f'Exception: {e}'
 
         if attempt < max_retries - 1:
             logger.warning(
-                f"SASA calculation {sasa_script} failed (attempt {attempt + 1}/{max_retries})"
+                f'SASA calculation {sasa_script} failed (attempt {attempt + 1}/{max_retries})'
             )
             time.sleep(2**attempt)
 
@@ -183,7 +183,7 @@ class MMPBSASettings:
     last_frame: int = -1
     stride: int = 1
     n_cpus: int = 1
-    out: str = "mmpbsa"
+    out: str = 'mmpbsa'
     solvent_probe: float = 1.4
     offset: int = 0
     gb_surften: float = 0.0072
@@ -239,13 +239,13 @@ class MMPBSA(MMPBSASettings):
         last_frame: int = -1,
         stride: int = 1,
         n_cpus: int = 1,
-        out: str = "mmpbsa",
+        out: str = 'mmpbsa',
         solvent_probe: float = 1.4,
         offset: int = 0,
         gb_surften: float = 0.0072,
         gb_surfoff: float = 0.0,
         amberhome: str | None = None,
-        parallel_mode: Literal["frame", "serial"] = "frame",
+        parallel_mode: Literal['frame', 'serial'] = 'frame',
         **kwargs,
     ):
         """Initialize the MMPBSA calculator.
@@ -285,23 +285,23 @@ class MMPBSA(MMPBSASettings):
         self.top = Path(self.top).resolve()
         self.traj = Path(self.dcd).resolve()
         self.path = self.top.parent
-        if out == "mmpbsa":
-            self.path = self.path / "mmpbsa"
+        if out == 'mmpbsa':
+            self.path = self.path / 'mmpbsa'
         else:
             self.path = Path(out).resolve()
 
         self.path.mkdir(exist_ok=True, parents=True)
 
-        self.cpptraj = "cpptraj"
-        self.mmpbsa_py_energy = "mmpbsa_py_energy"
+        self.cpptraj = 'cpptraj'
+        self.mmpbsa_py_energy = 'mmpbsa_py_energy'
         if amberhome is None:
-            if "AMBERHOME" in os.environ:
-                amberhome = os.environ["AMBERHOME"]
+            if 'AMBERHOME' in os.environ:
+                amberhome = os.environ['AMBERHOME']
             else:
-                raise ValueError("AMBERHOME not set in env vars!")
+                raise ValueError('AMBERHOME not set in env vars!')
 
-        self.cpptraj = Path(amberhome) / "bin" / self.cpptraj
-        self.mmpbsa_py_energy = Path(amberhome) / "bin" / self.mmpbsa_py_energy
+        self.cpptraj = Path(amberhome) / 'bin' / self.cpptraj
+        self.mmpbsa_py_energy = Path(amberhome) / 'bin' / self.mmpbsa_py_energy
 
         self.fh = FileHandler(
             top=self.top,
@@ -329,17 +329,17 @@ class MMPBSA(MMPBSASettings):
         using the configured parallelization mode.
         """
         logger.debug(
-            f"Preparing MM-PBSA calculation with {self.n_cpus} CPUs "
-            f"(mode: {self.parallel_mode})"
+            f'Preparing MM-PBSA calculation with {self.n_cpus} CPUs '
+            f'(mode: {self.parallel_mode})'
         )
         gb_mdin, pb_mdin = self.write_mdins()
 
-        if self.parallel_mode == "frame":
+        if self.parallel_mode == 'frame':
             self._run_frame_parallel(gb_mdin, pb_mdin)
         else:
             self._run_serial(gb_mdin, pb_mdin)
 
-        logger.debug("Collating results.")
+        logger.debug('Collating results.')
         self.analyzer.parse_outputs()
 
         self.free_energy = self.analyzer.free_energy
@@ -352,10 +352,10 @@ class MMPBSA(MMPBSASettings):
             pb_mdin: Path to PB input file.
         """
         for prefix, top, traj, pdb in self.fh.files:
-            logger.debug(f"Computing energy terms for {prefix.name}.")
+            logger.debug(f'Computing energy terms for {prefix.name}.')
             self.calculate_sasa(prefix, top, traj)
-            self.calculate_energy(prefix, top, traj, pdb, gb_mdin, "gb")
-            self.calculate_energy(prefix, top, traj, pdb, pb_mdin, "pb")
+            self.calculate_energy(prefix, top, traj, pdb, gb_mdin, 'gb')
+            self.calculate_energy(prefix, top, traj, pdb, pb_mdin, 'pb')
 
     def _run_frame_parallel(self, gb_mdin: Path, pb_mdin: Path) -> None:
         """Run calculations with frame-level parallelization.
@@ -376,7 +376,7 @@ class MMPBSA(MMPBSASettings):
 
         for prefix, top, traj_chunks, pdb in self.fh.files_chunked:
             system_name = prefix.name
-            logger.debug(f"Preparing parallel energy calculations for {system_name}.")
+            logger.debug(f'Preparing parallel energy calculations for {system_name}.')
 
             # SASA calculations for each chunk
             for i, traj_chunk in enumerate(traj_chunks):
@@ -388,7 +388,7 @@ class MMPBSA(MMPBSASettings):
             # Energy calculations for each chunk
             for i, traj_chunk in enumerate(traj_chunks):
                 # GB calculation
-                out_gb = f"{system_name}_chunk{i}_gb.mdout"
+                out_gb = f'{system_name}_chunk{i}_gb.mdout'
                 energy_tasks.append(
                     (
                         str(self.mmpbsa_py_energy),
@@ -401,7 +401,7 @@ class MMPBSA(MMPBSASettings):
                     )
                 )
                 # PB calculation
-                out_pb = f"{system_name}_chunk{i}_pb.mdout"
+                out_pb = f'{system_name}_chunk{i}_pb.mdout'
                 energy_tasks.append(
                     (
                         str(self.mmpbsa_py_energy),
@@ -415,7 +415,7 @@ class MMPBSA(MMPBSASettings):
                 )
 
         # Run SASA calculations in parallel
-        logger.debug(f"Running {len(sasa_tasks)} SASA calculations in parallel.")
+        logger.debug(f'Running {len(sasa_tasks)} SASA calculations in parallel.')
         sasa_failures = []
         with ThreadPoolExecutor(max_workers=self.n_cpus) as executor:
             futures = []
@@ -423,7 +423,7 @@ class MMPBSA(MMPBSASettings):
                 futures.append(executor.submit(_run_sasa_calculation, task))
 
             logger.debug(
-                f"Submitted {len(futures)} SASA futures, waiting for completion..."
+                f'Submitted {len(futures)} SASA futures, waiting for completion...'
             )
             done, _ = wait(futures, return_when=ALL_COMPLETED)
 
@@ -431,20 +431,20 @@ class MMPBSA(MMPBSASettings):
                 script, success, error = future.result()
                 if not success:
                     sasa_failures.append((script, error))
-                    logger.error(f"SASA calculation failed: {script}: {error[:300]}")
+                    logger.error(f'SASA calculation failed: {script}: {error[:300]}')
 
         if sasa_failures:
             failed_scripts = [f[0] for f in sasa_failures]
             raise RuntimeError(
-                f"{len(sasa_failures)} SASA calculations failed: {failed_scripts}"
+                f'{len(sasa_failures)} SASA calculations failed: {failed_scripts}'
             )
-        logger.debug("All SASA calculations completed successfully")
+        logger.debug('All SASA calculations completed successfully')
 
         # Combine SASA results
         self._combine_sasa_chunks()
 
         # Run Energy calculations in parallel
-        logger.debug(f"Running {len(energy_tasks)} energy calculations in parallel.")
+        logger.debug(f'Running {len(energy_tasks)} energy calculations in parallel.')
         energy_failures = []
         with ThreadPoolExecutor(max_workers=self.n_cpus) as executor:
             futures = []
@@ -452,7 +452,7 @@ class MMPBSA(MMPBSASettings):
                 futures.append(executor.submit(_run_energy_calculation, task))
 
             logger.debug(
-                f"Submitted {len(futures)} Energy futures, waiting for completion..."
+                f'Submitted {len(futures)} Energy futures, waiting for completion...'
             )
             done, _ = wait(futures, return_when=ALL_COMPLETED)
 
@@ -460,14 +460,14 @@ class MMPBSA(MMPBSASettings):
                 script, success, error = future.result()
                 if not success:
                     energy_failures.append((script, error))
-                    logger.error(f"Energy calculation failed: {script}: {error[:300]}")
+                    logger.error(f'Energy calculation failed: {script}: {error[:300]}')
 
         if energy_failures:
             failed_scripts = [f[0] for f in energy_failures]
             raise RuntimeError(
-                f"{len(energy_failures)} Energy calculations failed: {failed_scripts}"
+                f'{len(energy_failures)} Energy calculations failed: {failed_scripts}'
             )
-        logger.debug("All Energy calculations completed successfully")
+        logger.debug('All Energy calculations completed successfully')
 
         # Combine Energy results
         self._combine_energy_chunks()
@@ -487,14 +487,14 @@ class MMPBSA(MMPBSASettings):
         Returns:
             Path to the generated script file.
         """
-        sasa = self.path / f"sasa_{prefix.name}_chunk{chunk_idx}.in"
-        out_file = f"{prefix.name}_chunk{chunk_idx}_surf.dat"
+        sasa = self.path / f'sasa_{prefix.name}_chunk{chunk_idx}.in'
+        out_file = f'{prefix.name}_chunk{chunk_idx}_surf.dat'
         sasa_in = [
-            f"parm {prm}",
-            f"trajin {trj}",
-            f"molsurf :* out {out_file} probe {self.solvent_probe} offset {self.offset}",
-            "run",
-            "quit",
+            f'parm {prm}',
+            f'trajin {trj}',
+            f'molsurf :* out {out_file} probe {self.solvent_probe} offset {self.offset}',
+            'run',
+            'quit',
         ]
         self.fh.write_file(sasa_in, sasa)
         return sasa
@@ -503,12 +503,12 @@ class MMPBSA(MMPBSASettings):
         """Combine SASA results from all chunks in correct frame order."""
 
         def extract_chunk_idx(filepath: Path) -> int:
-            match = re.search(r"_chunk(\d+)_", filepath.name)
+            match = re.search(r'_chunk(\d+)_', filepath.name)
             return int(match.group(1)) if match else 0
 
-        for system in ["complex", "receptor", "ligand"]:
+        for system in ['complex', 'receptor', 'ligand']:
             combined_data = []
-            chunk_files = list(self.path.glob(f"{system}_chunk*_surf.dat"))
+            chunk_files = list(self.path.glob(f'{system}_chunk*_surf.dat'))
             chunk_files.sort(key=extract_chunk_idx)
 
             for chunk_file in chunk_files:
@@ -519,8 +519,8 @@ class MMPBSA(MMPBSASettings):
                     else:
                         combined_data.extend(lines)
 
-            output = self.path / f"{system}_surf.dat"
-            with open(output, "w") as f:
+            output = self.path / f'{system}_surf.dat'
+            with open(output, 'w') as f:
                 f.writelines(combined_data)
 
             for chunk_file in chunk_files:
@@ -530,13 +530,13 @@ class MMPBSA(MMPBSASettings):
         """Combine energy results from all chunks in correct frame order."""
 
         def extract_chunk_idx(filepath: Path) -> int:
-            match = re.search(r"_chunk(\d+)_", filepath.name)
+            match = re.search(r'_chunk(\d+)_', filepath.name)
             return int(match.group(1)) if match else 0
 
-        for system in ["complex", "receptor", "ligand"]:
-            for level in ["gb", "pb"]:
+        for system in ['complex', 'receptor', 'ligand']:
+            for level in ['gb', 'pb']:
                 combined_data = []
-                chunk_files = list(self.path.glob(f"{system}_chunk*_{level}.mdout"))
+                chunk_files = list(self.path.glob(f'{system}_chunk*_{level}.mdout'))
                 chunk_files.sort(key=extract_chunk_idx)
 
                 for chunk_file in chunk_files:
@@ -544,9 +544,9 @@ class MMPBSA(MMPBSASettings):
                         content = f.read()
                         combined_data.append(content)
 
-                output = self.path / f"{system}_{level}.mdout"
-                with open(output, "w") as f:
-                    f.write("\n".join(combined_data))
+                output = self.path / f'{system}_{level}.mdout'
+                with open(output, 'w') as f:
+                    f.write('\n'.join(combined_data))
 
                 for chunk_file in chunk_files:
                     chunk_file.unlink()
@@ -559,19 +559,19 @@ class MMPBSA(MMPBSASettings):
             prm: Path to prmtop file.
             trj: Path to CRD trajectory file.
         """
-        sasa = self.fh.path / "sasa.in"
+        sasa = self.fh.path / 'sasa.in'
         sasa_in = [
-            f"parm {prm}",
-            f"trajin {trj}",
-            f"molsurf :* out {pre}_surf.dat probe {self.solvent_probe} offset {self.offset}",
-            "run",
-            "quit",
+            f'parm {prm}',
+            f'trajin {trj}',
+            f'molsurf :* out {pre}_surf.dat probe {self.solvent_probe} offset {self.offset}',
+            'run',
+            'quit',
         ]
 
         self.fh.write_file(sasa_in, sasa)
 
         subprocess.run(
-            f"{self.cpptraj} -i {sasa}",
+            f'{self.cpptraj} -i {sasa}',
             shell=True,
             cwd=str(self.path),
             stdout=subprocess.DEVNULL,
@@ -599,8 +599,8 @@ class MMPBSA(MMPBSASettings):
             suf: Suffix for output file ('gb' or 'pb').
         """
         cmd = (
-            f"{self.mmpbsa_py_energy} -O -i {mdin} -p {prm} "
-            f"-c {pdb} -y {trj} -o {pre}_{suf}.mdout"
+            f'{self.mmpbsa_py_energy} -O -i {mdin} -p {prm} '
+            f'-c {pdb} -y {trj} -o {pre}_{suf}.mdout'
         )
         subprocess.run(
             cmd,
@@ -616,42 +616,42 @@ class MMPBSA(MMPBSASettings):
         Returns:
             Tuple of (gb_mdin_path, pb_mdin_path).
         """
-        gb = self.fh.path / "gb_mdin"
+        gb = self.fh.path / 'gb_mdin'
         gb_mdin = [
-            "GB",
-            "igb = 2",
-            "extdiel = 78.3",
-            "saltcon = 0.10",
-            f"surften = {self.gb_surften}",
-            "rgbmax = 25.0",
+            'GB',
+            'igb = 2',
+            'extdiel = 78.3',
+            'saltcon = 0.10',
+            f'surften = {self.gb_surften}',
+            'rgbmax = 25.0',
         ]
         self.fh.write_file(gb_mdin, gb)
 
-        pb = self.fh.path / "pb_mdin"
+        pb = self.fh.path / 'pb_mdin'
         pb_mdin = [
-            "PB",
-            "inp = 2",
-            "smoothopt = 1",
-            "radiopt = 0",
-            "npbopt = 0",
-            "solvopt = 1",
-            "maxitn = 1000",
-            "nfocus = 2",
-            "bcopt = 5",
-            "eneopt = 2",
-            "fscale = 8",
-            "epsin = 1.0",
-            "epsout = 80.0",
-            "istrng = 0.10",
-            "dprob = 1.4",
-            "iprob = 2.0",
-            "accept = 0.001",
-            "fillratio = 4.0",
-            "space = 0.5",
-            "cutnb = 0",
-            "sprob = 0.557",
-            "cavity_surften = 0.0378",
-            "cavity_offset = -0.5692",
+            'PB',
+            'inp = 2',
+            'smoothopt = 1',
+            'radiopt = 0',
+            'npbopt = 0',
+            'solvopt = 1',
+            'maxitn = 1000',
+            'nfocus = 2',
+            'bcopt = 5',
+            'eneopt = 2',
+            'fscale = 8',
+            'epsin = 1.0',
+            'epsout = 80.0',
+            'istrng = 0.10',
+            'dprob = 1.4',
+            'iprob = 2.0',
+            'accept = 0.001',
+            'fillratio = 4.0',
+            'space = 0.5',
+            'cutnb = 0',
+            'sprob = 0.557',
+            'cavity_surften = 0.0378',
+            'cavity_offset = -0.5692',
         ]
         self.fh.write_file(pb_mdin, pb)
 
@@ -667,8 +667,8 @@ class MMPBSA(MMPBSASettings):
         empty_files = []
         invalid_files = []
 
-        for system in ["complex", "receptor", "ligand"]:
-            sasa_file = self.path / f"{system}_surf.dat"
+        for system in ['complex', 'receptor', 'ligand']:
+            sasa_file = self.path / f'{system}_surf.dat'
             if not sasa_file.exists():
                 missing_files.append(str(sasa_file))
             elif sasa_file.stat().st_size == 0:
@@ -676,13 +676,13 @@ class MMPBSA(MMPBSASettings):
             else:
                 with open(sasa_file) as f:
                     data_lines = [
-                        line for line in f if line.strip() and not line.strip().startswith("#")
+                        line for line in f if line.strip() and not line.strip().startswith('#')
                     ]
                     if len(data_lines) == 0:
-                        invalid_files.append(f"{sasa_file} (no data lines)")
+                        invalid_files.append(f'{sasa_file} (no data lines)')
 
-            for level in ["gb", "pb"]:
-                energy_file = self.path / f"{system}_{level}.mdout"
+            for level in ['gb', 'pb']:
+                energy_file = self.path / f'{system}_{level}.mdout'
                 if not energy_file.exists():
                     missing_files.append(str(energy_file))
                 elif energy_file.stat().st_size == 0:
@@ -690,16 +690,16 @@ class MMPBSA(MMPBSASettings):
                 else:
                     with open(energy_file) as f:
                         content = f.read()
-                        if " BOND" not in content:
-                            invalid_files.append(f"{energy_file} (no energy data)")
+                        if ' BOND' not in content:
+                            invalid_files.append(f'{energy_file} (no energy data)')
 
         errors = []
         if missing_files:
-            errors.append(f"Missing files: {missing_files}")
+            errors.append(f'Missing files: {missing_files}')
         if empty_files:
-            errors.append(f"Empty files: {empty_files}")
+            errors.append(f'Empty files: {empty_files}')
         if invalid_files:
-            errors.append(f"Invalid files: {invalid_files}")
+            errors.append(f'Invalid files: {invalid_files}')
 
         if errors:
             raise RuntimeError(f"Output verification failed: {'; '.join(errors)}")
@@ -752,10 +752,10 @@ class OutputAnalyzer:
 
         self.free_energy = None
 
-        self.systems = ["receptor", "ligand", "complex"]
-        self.levels = ["gb", "pb"]
+        self.systems = ['receptor', 'ligand', 'complex']
+        self.levels = ['gb', 'pb']
 
-        self.solvent_contributions = ["EGB", "ESURF", "EPB", "ECAVITY"]
+        self.solvent_contributions = ['EGB', 'ESURF', 'EPB', 'ECAVITY']
 
     def parse_outputs(self) -> None:
         """Parse all output files and compute binding free energies."""
@@ -763,19 +763,19 @@ class OutputAnalyzer:
         self.pb = pl.DataFrame()
 
         for system in self.systems:
-            E_sasa = self.read_sasa(self.path / f"{system}_surf.dat")
-            E_gb = self.read_GB(self.path / f"{system}_gb.mdout", system)
-            E_pb = self.read_PB(self.path / f"{system}_pb.mdout", system)
+            E_sasa = self.read_sasa(self.path / f'{system}_surf.dat')
+            E_gb = self.read_GB(self.path / f'{system}_gb.mdout', system)
+            E_pb = self.read_PB(self.path / f'{system}_pb.mdout', system)
 
-            E_gb = E_gb.drop("ESURF").with_columns(E_sasa)
+            E_gb = E_gb.drop('ESURF').with_columns(E_sasa)
 
-            self.gb = pl.concat([self.gb, E_gb], how="vertical")
-            self.pb = pl.concat([self.pb, E_pb], how="vertical")
+            self.gb = pl.concat([self.gb, E_gb], how='vertical')
+            self.pb = pl.concat([self.pb, E_pb], how='vertical')
 
         all_cols = list(set(self.gb.columns + self.pb.columns))
         self.contributions = {
-            "G gas": [col for col in all_cols if col not in self.solvent_contributions],
-            "G solv": [col for col in all_cols if col in self.solvent_contributions],
+            'G gas': [col for col in all_cols if col not in self.solvent_contributions],
+            'G solv': [col for col in all_cols if col in self.solvent_contributions],
         }
 
         self.check_bonded_terms()
@@ -791,9 +791,9 @@ class OutputAnalyzer:
         Returns:
             Polars Series of rescaled SASA energies.
         """
-        df = pd.read_csv(_file, sep=r"\s+")
+        df = pd.read_csv(_file, sep=r'\s+')
         sasa = df.iloc[:, -1].to_numpy(dtype=float) * self.surften + self.offset
-        return pl.Series("ESURF", sasa)
+        return pl.Series('ESURF', sasa)
 
     def read_GB(self, _file: PathLike, system: str) -> pl.DataFrame:
         """Read GB mdout file and parse energy terms.
@@ -806,16 +806,16 @@ class OutputAnalyzer:
             Polars DataFrame of parsed energy data.
         """
         gb_terms = [
-            "BOND",
-            "ANGLE",
-            "DIHED",
-            "VDWAALS",
-            "EEL",
-            "EGB",
-            "1-4 VDW",
-            "1-4 EEL",
-            "RESTRAINT",
-            "ESURF",
+            'BOND',
+            'ANGLE',
+            'DIHED',
+            'VDWAALS',
+            'EEL',
+            'EGB',
+            '1-4 VDW',
+            '1-4 EEL',
+            'RESTRAINT',
+            'ESURF',
         ]
         data = {gb_term: [] for gb_term in gb_terms}
 
@@ -833,17 +833,17 @@ class OutputAnalyzer:
             Polars DataFrame of parsed energy data.
         """
         pb_terms = [
-            "BOND",
-            "ANGLE",
-            "DIHED",
-            "VDWAALS",
-            "EEL",
-            "EPB",
-            "1-4 VDW",
-            "1-4 EEL",
-            "RESTRAINT",
-            "ECAVITY",
-            "EDISPER",
+            'BOND',
+            'ANGLE',
+            'DIHED',
+            'VDWAALS',
+            'EEL',
+            'EPB',
+            '1-4 VDW',
+            '1-4 EEL',
+            'RESTRAINT',
+            'ECAVITY',
+            'EDISPER',
         ]
         data = {pb_term: [] for pb_term in pb_terms}
 
@@ -864,14 +864,14 @@ class OutputAnalyzer:
             Polars DataFrame of energy data.
         """
         for line in file_contents:
-            if "=" in line and any(key in line for key in data):
+            if '=' in line and any(key in line for key in data):
                 parsed = self.parse_line(line)
                 for key, val in parsed:
                     if key in data:
                         data[key].append(val)
 
         df = pl.DataFrame(data)
-        df = df.with_columns(pl.lit(system).alias("system"))
+        df = df.with_columns(pl.lit(system).alias('system'))
         return df
 
     def check_bonded_terms(self) -> None:
@@ -880,12 +880,12 @@ class OutputAnalyzer:
         Raises:
             ValueError: If bonded terms don't cancel.
         """
-        bonded = ["BOND", "ANGLE", "DIHED", "1-4 VDW", "1-4 EEL"]
+        bonded = ['BOND', 'ANGLE', 'DIHED', '1-4 VDW', '1-4 EEL']
 
         for theory_level in (self.gb, self.pb):
-            a = theory_level.filter(pl.col("system") == "receptor")
-            b = theory_level.filter(pl.col("system") == "ligand")
-            c = theory_level.filter(pl.col("system") == "complex")
+            a = theory_level.filter(pl.col('system') == 'receptor')
+            b = theory_level.filter(pl.col('system') == 'ligand')
+            c = theory_level.filter(pl.col('system') == 'complex')
 
             a = a.select(pl.col([col for col in a.columns if col in bonded])).to_numpy()
             b = b.select(pl.col([col for col in b.columns if col in bonded])).to_numpy()
@@ -893,9 +893,9 @@ class OutputAnalyzer:
 
             diffs = np.array(c - b - a)
             if np.where(diffs >= self.tolerance)[0].size > 0:
-                raise ValueError("Bonded terms for receptor + ligand != complex!")
+                raise ValueError('Bonded terms for receptor + ligand != complex!')
 
-        remove = ["RESTRAINT", "EDISPER"]
+        remove = ['RESTRAINT', 'EDISPER']
         self.gb = self.gb.select(
             pl.col([col for col in self.gb.columns if col not in remove])
         )
@@ -911,7 +911,7 @@ class OutputAnalyzer:
         full_statistics = {sys: {} for sys in self.systems}
         for theory, level in zip([self.gb, self.pb], self.levels, strict=True):
             for system in self.systems:
-                sys = theory.filter(pl.col("system") == system).drop("system")
+                sys = theory.filter(pl.col('system') == system).drop('system')
 
                 stats = {}
                 for col in sys.columns:
@@ -922,7 +922,7 @@ class OutputAnalyzer:
                     if err is not None:
                         err /= self.square_root_N
 
-                    stats[col] = {"mean": mean, "std": stdev, "err": err}
+                    stats[col] = {'mean': mean, 'std': stdev, 'err': err}
 
                 for energy, contributors in self.contributions.items():
                     pooled_data = (
@@ -934,34 +934,34 @@ class OutputAnalyzer:
                     )
 
                     stats[energy] = {
-                        "mean": np.mean(pooled_data),
-                        "std": np.std(pooled_data),
-                        "err": np.std(pooled_data) / self.square_root_N,
+                        'mean': np.mean(pooled_data),
+                        'std': np.std(pooled_data),
+                        'err': np.std(pooled_data) / self.square_root_N,
                     }
 
                 total_data = sys.to_numpy().flatten()
-                stats["total"] = {
-                    "mean": np.mean(total_data),
-                    "std": np.std(total_data),
-                    "err": np.std(total_data) / self.square_root_N,
+                stats['total'] = {
+                    'mean': np.mean(total_data),
+                    'std': np.std(total_data),
+                    'err': np.std(total_data) / self.square_root_N,
                 }
 
                 full_statistics[system][level] = stats
 
-        with open("statistics.json", "w") as fout:
+        with open('statistics.json', 'w') as fout:
             json.dump(full_statistics, fout, indent=4)
 
     def compute_dG(self) -> None:
         """Compute binding free energy (ΔG) for GB and PB methods."""
         differences = []
         for theory in [self.gb, self.pb]:
-            diff_cols = [col for col in theory.columns if col != "system"]
+            diff_cols = [col for col in theory.columns if col != 'system']
             diff_arr = (
-                theory.filter(pl.col("system") == "complex").drop("system").to_numpy()
+                theory.filter(pl.col('system') == 'complex').drop('system').to_numpy()
             )
             for system in self.systems[:2]:
                 diff_arr -= (
-                    theory.filter(pl.col("system") == system).drop("system").to_numpy()
+                    theory.filter(pl.col('system') == system).drop('system').to_numpy()
                 )
 
             means = np.mean(diff_arr, axis=0)
@@ -985,7 +985,7 @@ class OutputAnalyzer:
                     (errs, [np.std(contribution) / self.square_root_N])
                 )
 
-            diff_cols.append("∆G Binding")
+            diff_cols.append('∆G Binding')
             total = np.sum(np.vstack(gas_solv_phase), axis=0)
 
             means = np.concatenate((means, [np.mean(total)]))
@@ -1008,34 +1008,34 @@ class OutputAnalyzer:
         """
         print_statement = []
         log_statement = []
-        for df, level in zip(dfs, ["Generalized Born ", "Poisson Boltzmann"], strict=True):
+        for df, level in zip(dfs, ['Generalized Born ', 'Poisson Boltzmann'], strict=True):
             print_statement += [
                 f"{' ':<20}=========================",
                 f"{' ':<20}=== {level} ===",
                 f"{' ':<20}=========================",
-                "Energy Component    Average         Std. Dev.       Std. Err. of Mean",
-                "---------------------------------------------------------------------",
+                'Energy Component    Average         Std. Dev.       Std. Err. of Mean',
+                '---------------------------------------------------------------------',
             ]
             for col in df.columns:
                 mean, std, err = [x.item() for x in df.select(pl.col(col)).to_numpy()]
-                report = f"{col:<20}{mean:<16.3f}{std:<16.3f}{err:<16.3f}"
+                report = f'{col:<20}{mean:<16.3f}{std:<16.3f}{err:<16.3f}'
                 if abs(mean) <= self.tolerance:
                     continue
 
-                if col in ["G gas", "∆G Binding"]:
-                    print_statement.append("")
+                if col in ['G gas', '∆G Binding']:
+                    print_statement.append('')
 
-                if col == "∆G Binding":
-                    log_statement.append(f"{level.strip()}:")
+                if col == '∆G Binding':
+                    log_statement.append(f'{level.strip()}:')
                     log_statement.append(report)
 
-                    if level == "Poisson Boltzmann":
+                    if level == 'Poisson Boltzmann':
                         self.free_energy = [mean, std]
 
                 print_statement.append(report)
 
-        print_statement = "\n".join(print_statement)
-        with open(self.path / "deltaG.txt", "w") as fout:
+        print_statement = '\n'.join(print_statement)
+        with open(self.path / 'deltaG.txt', 'w') as fout:
             fout.write(print_statement)
 
         if self.log:
@@ -1054,7 +1054,7 @@ class OutputAnalyzer:
         Returns:
             Zip iterator of (term_names, values).
         """
-        eq_split = line.split("=")
+        eq_split = line.split('=')
 
         if len(eq_split) == 2:
             splits = [eq_spl.strip() for eq_spl in eq_split]
@@ -1062,7 +1062,7 @@ class OutputAnalyzer:
             splits = [eq_split[0].strip()]
 
             for i in range(1, len(eq_split) - 1):
-                splits += [spl.strip() for spl in eq_split[i].strip().split("  ")]
+                splits += [spl.strip() for spl in eq_split[i].strip().split('  ')]
 
             splits += [eq_split[-1].strip()]
 
@@ -1144,41 +1144,41 @@ class FileHandler:
             self._split_trajectories()
         else:
             for system, traj in zip(
-                ["complex", "receptor", "ligand"], self.trajectories, strict=True
+                ['complex', 'receptor', 'ligand'], self.trajectories, strict=True
             ):
                 self.trajectory_chunks[system] = [traj]
 
     def prepare_topologies(self) -> None:
         """Slice sub-topologies for complex, receptor, and ligand."""
         self.topologies = [
-            self.path / "complex.prmtop",
-            self.path / "receptor.prmtop",
-            self.path / "ligand.prmtop",
+            self.path / 'complex.prmtop',
+            self.path / 'receptor.prmtop',
+            self.path / 'ligand.prmtop',
         ]
 
         cpptraj_in = [
-            f"parm {self.top}",
-            "parmstrip :Na+,Cl-,WAT",
-            "parmbox nobox",
-            f"parmwrite out {self.topologies[0]}",
-            "run",
-            "clear all",
-            f"parm {self.topologies[0]}",
-            f"parmstrip {self.selections[0]}",
-            f"parmwrite out {self.topologies[1]}",
-            "run",
-            "clear all",
-            f"parm {self.topologies[0]}",
-            f"parmstrip {self.selections[1]}",
-            f"parmwrite out {self.topologies[2]}",
-            "run",
-            "quit",
+            f'parm {self.top}',
+            'parmstrip :Na+,Cl-,WAT',
+            'parmbox nobox',
+            f'parmwrite out {self.topologies[0]}',
+            'run',
+            'clear all',
+            f'parm {self.topologies[0]}',
+            f'parmstrip {self.selections[0]}',
+            f'parmwrite out {self.topologies[1]}',
+            'run',
+            'clear all',
+            f'parm {self.topologies[0]}',
+            f'parmstrip {self.selections[1]}',
+            f'parmwrite out {self.topologies[2]}',
+            'run',
+            'quit',
         ]
 
-        script = self.path / "cpptraj.in"
-        self.write_file("\n".join(cpptraj_in), script)
+        script = self.path / 'cpptraj.in'
+        self.write_file('\n'.join(cpptraj_in), script)
         subprocess.call(
-            f"{self.cpptraj} -i {script}",
+            f'{self.cpptraj} -i {script}',
             shell=True,
             cwd=str(self.path),
             stdout=subprocess.DEVNULL,
@@ -1188,44 +1188,44 @@ class FileHandler:
 
     def prepare_trajectories(self) -> None:
         """Convert DCD trajectory to AMBER CRD format."""
-        self.trajectories = [path.with_suffix(".crd") for path in self.topologies]
-        self.pdbs = [path.with_suffix(".pdb") for path in self.topologies]
+        self.trajectories = [path.with_suffix('.crd') for path in self.topologies]
+        self.pdbs = [path.with_suffix('.pdb') for path in self.topologies]
 
-        frame_control = f"start {self.ff}"
+        frame_control = f'start {self.ff}'
         if self.lf > -1:
-            frame_control += f" stop {self.lf}"
-        frame_control += f" offset {self.stride}"
+            frame_control += f' stop {self.lf}'
+        frame_control += f' offset {self.stride}'
 
         cpptraj_in = [
-            f"parm {self.top}",
-            f"trajin {self.traj}",
-            "strip :WAT,Na+,Cl*",
-            "autoimage",
-            "rmsd !(:WAT,Cl*,CIO,Cs+,IB,K*,Li+,MG*,Na+,Rb+,CS,RB,NA,F,CL) mass first",
-            f"trajout {self.trajectories[0]} crd {frame_control}",
-            f"trajout {self.pdbs[0]} pdb onlyframes 1",
-            "run",
-            "clear all",
-            f"parm {self.topologies[0]}",
-            f"trajin {self.trajectories[0]}",
-            f"strip {self.selections[0]}",
-            f"trajout {self.trajectories[1]} crd",
-            f"trajout {self.pdbs[1]} pdb onlyframes 1",
-            "run",
-            "clear all",
-            f"parm {self.topologies[0]}",
-            f"trajin {self.trajectories[0]}",
-            f"strip {self.selections[1]}",
-            f"trajout {self.trajectories[2]} crd",
-            f"trajout {self.pdbs[2]} pdb onlyframes 1",
-            "run",
-            "quit",
+            f'parm {self.top}',
+            f'trajin {self.traj}',
+            'strip :WAT,Na+,Cl*',
+            'autoimage',
+            'rmsd !(:WAT,Cl*,CIO,Cs+,IB,K*,Li+,MG*,Na+,Rb+,CS,RB,NA,F,CL) mass first',
+            f'trajout {self.trajectories[0]} crd {frame_control}',
+            f'trajout {self.pdbs[0]} pdb onlyframes 1',
+            'run',
+            'clear all',
+            f'parm {self.topologies[0]}',
+            f'trajin {self.trajectories[0]}',
+            f'strip {self.selections[0]}',
+            f'trajout {self.trajectories[1]} crd',
+            f'trajout {self.pdbs[1]} pdb onlyframes 1',
+            'run',
+            'clear all',
+            f'parm {self.topologies[0]}',
+            f'trajin {self.trajectories[0]}',
+            f'strip {self.selections[1]}',
+            f'trajout {self.trajectories[2]} crd',
+            f'trajout {self.pdbs[2]} pdb onlyframes 1',
+            'run',
+            'quit',
         ]
 
-        name = self.path / "mdcrd.in"
-        self.write_file("\n".join(cpptraj_in), name)
+        name = self.path / 'mdcrd.in'
+        self.write_file('\n'.join(cpptraj_in), name)
         subprocess.call(
-            f"{self.cpptraj} -i {name}",
+            f'{self.cpptraj} -i {name}',
             shell=True,
             cwd=str(self.path),
             stdout=subprocess.DEVNULL,
@@ -1235,52 +1235,52 @@ class FileHandler:
 
     def _count_frames(self) -> None:
         """Count total frames in the processed trajectory."""
-        count_script = self.path / "count_frames.in"
+        count_script = self.path / 'count_frames.in'
 
         script_content = [
-            f"parm {self.topologies[0]}",
-            f"trajin {self.trajectories[0]}",
-            f"trajinfo {self.trajectories[0]} name myinfo",
-            "run",
-            "quit",
+            f'parm {self.topologies[0]}',
+            f'trajin {self.trajectories[0]}',
+            f'trajinfo {self.trajectories[0]} name myinfo',
+            'run',
+            'quit',
         ]
-        self.write_file("\n".join(script_content), count_script)
+        self.write_file('\n'.join(script_content), count_script)
 
         result = subprocess.run(
-            f"{self.cpptraj} -i {count_script}",
+            f'{self.cpptraj} -i {count_script}',
             shell=True,
             cwd=str(self.path),
             capture_output=True,
             text=True,
         )
 
-        for line in result.stdout.split("\n"):
-            if "frames" in line.lower() and "total" in line.lower():
+        for line in result.stdout.split('\n'):
+            if 'frames' in line.lower() and 'total' in line.lower():
                 parts = line.split()
                 for part in parts:
                     if part.isdigit():
                         self.total_frames = int(part)
                         break
 
-        if not hasattr(self, "total_frames"):
+        if not hasattr(self, 'total_frames'):
             self.total_frames = self._estimate_frames()
 
         count_script.unlink(missing_ok=True)
-        logger.debug(f"Total frames in trajectory: {self.total_frames}")
+        logger.debug(f'Total frames in trajectory: {self.total_frames}')
 
     def _estimate_frames(self) -> int:
         """Estimate frame count by running cpptraj analysis."""
-        script = self.path / "estimate_frames.in"
+        script = self.path / 'estimate_frames.in'
         script_content = [
-            f"parm {self.topologies[0]}",
-            f"trajin {self.trajectories[0]}",
-            "run",
-            "quit",
+            f'parm {self.topologies[0]}',
+            f'trajin {self.trajectories[0]}',
+            'run',
+            'quit',
         ]
-        self.write_file("\n".join(script_content), script)
+        self.write_file('\n'.join(script_content), script)
 
         result = subprocess.run(
-            f"{self.cpptraj} -i {script}",
+            f'{self.cpptraj} -i {script}',
             shell=True,
             cwd=str(self.path),
             capture_output=True,
@@ -1289,8 +1289,8 @@ class FileHandler:
 
         script.unlink(missing_ok=True)
 
-        for line in result.stdout.split("\n"):
-            if "frames" in line.lower():
+        for line in result.stdout.split('\n'):
+            if 'frames' in line.lower():
                 for word in line.split():
                     if word.isdigit():
                         return int(word)
@@ -1303,18 +1303,18 @@ class FileHandler:
 
         if actual_chunks < self.n_chunks:
             logger.warning(
-                f"Requested {self.n_chunks} chunks but only {self.total_frames} frames. "
-                f"Using {actual_chunks} chunks (some CPUs will be idle)"
+                f'Requested {self.n_chunks} chunks but only {self.total_frames} frames. '
+                f'Using {actual_chunks} chunks (some CPUs will be idle)'
             )
 
         frames_per_chunk = max(1, self.total_frames // actual_chunks)
         self.trajectory_chunks = {
-            system: [] for system in ["complex", "receptor", "ligand"]
+            system: [] for system in ['complex', 'receptor', 'ligand']
         }
 
         for (top, traj, system) in zip(self.topologies,
                                        self.trajectories,
-                                       ["complex", "receptor", "ligand"],
+                                       ['complex', 'receptor', 'ligand'],
                                        strict=True):
             for chunk_idx in range(actual_chunks):
                 start_frame = chunk_idx * frames_per_chunk + 1
@@ -1324,20 +1324,20 @@ class FileHandler:
                 else:
                     end_frame = (chunk_idx + 1) * frames_per_chunk
 
-                chunk_traj = self.path / f"{system}_chunk{chunk_idx}.crd"
+                chunk_traj = self.path / f'{system}_chunk{chunk_idx}.crd'
 
-                split_script = self.path / f"split_{system}_{chunk_idx}.in"
+                split_script = self.path / f'split_{system}_{chunk_idx}.in'
                 script_content = [
-                    f"parm {top}",
-                    f"trajin {traj} {start_frame} {end_frame}",
-                    f"trajout {chunk_traj} crd",
-                    "run",
-                    "quit",
+                    f'parm {top}',
+                    f'trajin {traj} {start_frame} {end_frame}',
+                    f'trajout {chunk_traj} crd',
+                    'run',
+                    'quit',
                 ]
-                self.write_file("\n".join(script_content), split_script)
+                self.write_file('\n'.join(script_content), split_script)
 
                 subprocess.run(
-                    f"{self.cpptraj} -i {split_script}",
+                    f'{self.cpptraj} -i {split_script}',
                     shell=True,
                     cwd=str(self.path),
                     stdout=subprocess.DEVNULL,
@@ -1348,8 +1348,8 @@ class FileHandler:
                 self.trajectory_chunks[system].append(chunk_traj)
 
         logger.debug(
-            f"Split trajectories into {actual_chunks} chunks "
-            f"of ~{frames_per_chunk} frames each."
+            f'Split trajectories into {actual_chunks} chunks '
+            f'of ~{frames_per_chunk} frames each.'
         )
 
     @property
@@ -1359,7 +1359,7 @@ class FileHandler:
         Returns:
             Zip of (prefix, topology, trajectory, pdb) for each system.
         """
-        _order = [self.path / prefix for prefix in ["complex", "receptor", "ligand"]]
+        _order = [self.path / prefix for prefix in ['complex', 'receptor', 'ligand']]
         return zip(_order, self.topologies, self.trajectories, self.pdbs, strict=True)
 
     @property
@@ -1371,7 +1371,7 @@ class FileHandler:
         """
         result = []
         for system, top, pdb in zip(
-            ["complex", "receptor", "ligand"], self.topologies, self.pdbs, strict=True
+            ['complex', 'receptor', 'ligand'], self.topologies, self.pdbs, strict=True
         ):
             prefix = self.path / system
             traj_chunks = self.trajectory_chunks[system]
@@ -1388,6 +1388,6 @@ class FileHandler:
             filepath: Output file path.
         """
         if isinstance(lines, list):
-            lines = "\n".join(lines)
-        with open(str(filepath), "w") as f:
+            lines = '\n'.join(lines)
+        with open(str(filepath), 'w') as f:
             f.write(lines)

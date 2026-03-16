@@ -9,7 +9,6 @@ import json
 from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
-from typing import Union
 
 import matplotlib.pyplot as plt
 import MDAnalysis as mda
@@ -19,7 +18,7 @@ import seaborn as sns
 from MDAnalysis.analysis.distances import distance_array
 from MDAnalysis.lib.util import convert_aa_code
 
-PathLike = Union[Path, str]
+PathLike = Path | str
 Results = dict[str, dict[str, float]]
 TaskTree = tuple[list[Callable], list[str]]
 
@@ -67,8 +66,8 @@ class PPInteractions:
         top: PathLike,
         traj: PathLike,
         out: PathLike,
-        sel1: str = "chainID A",
-        sel2: str = "chainID B",
+        sel1: str = 'chainID A',
+        sel2: str = 'chainID B',
         cov_cutoff: tuple[float] = (11.0, 13.0),
         sb_cutoff: float = 6.0,
         hbond_cutoff: float = 3.5,
@@ -114,14 +113,14 @@ class PPInteractions:
         cov = self.get_covariance()
         positive, negative = self.interpret_covariance(cov)
 
-        results = {"positive": {}, "negative": {}}
+        results = {'positive': {}, 'negative': {}}
         for res1, res2 in positive:
             data = self.compute_interactions(res1, res2)
-            results["positive"].update(data)
+            results['positive'].update(data)
 
         for res1, res2 in negative:
             data = self.compute_interactions(res1, res2)
-            results["negative"].update(data)
+            results['negative'].update(data)
 
         self.save(results)
 
@@ -145,18 +144,18 @@ class PPInteractions:
             type. Keys are residue pair names, values are dictionaries
             mapping interaction type to probability.
         """
-        grp1 = self.u.select_atoms(f"{self.sel1} and resid {res1}")
-        grp2 = self.u.select_atoms(f"{self.sel2} and resid {res2}")
+        grp1 = self.u.select_atoms(f'{self.sel1} and resid {res1}')
+        grp2 = self.u.select_atoms(f'{self.sel2} and resid {res2}')
         r1 = convert_aa_code(grp1.resnames[0])
         r2 = convert_aa_code(grp2.resnames[0])
-        name = f"A_{r1}{res1}-B_{r2}{res2}"
+        name = f'A_{r1}{res1}-B_{r2}{res2}'
 
-        data = {name: {label: 0.0 for label in ["hydrophobic", "hbond", "saltbridge"]}}
+        data = {name: {label: 0.0 for label in ['hydrophobic', 'hbond', 'saltbridge']}}
         function_calls, labels = self.identify_interaction_type(
             grp1.resnames[0], grp2.resnames[0]
         )
 
-        for call, label in zip(function_calls, labels):
+        for call, label in zip(function_calls, labels, strict=True):
             data[name][label] = call(grp1, grp2)
 
         return data
@@ -177,10 +176,10 @@ class PPInteractions:
         Returns:
             Covariance matrix with shape (N_residues_sel1, N_residues_sel2).
         """
-        p1_ca = self.u.select_atoms("chainID A and name CA")
+        p1_ca = self.u.select_atoms('chainID A and name CA')
         N = p1_ca.n_residues
 
-        p2_ca = self.u.select_atoms("chainID B and name CA")
+        p2_ca = self.u.select_atoms('chainID B and name CA')
         M = p2_ca.n_residues
 
         self.res_map(p1_ca, p2_ca)
@@ -188,7 +187,7 @@ class PPInteractions:
         R1_avg = np.zeros((N, 3))
         R2_avg = np.zeros((M, 3))
 
-        for ts in self.u.trajectory:
+        for _ts in self.u.trajectory:
             R1_avg += p1_ca.positions
             R2_avg += p2_ca.positions
 
@@ -197,7 +196,7 @@ class PPInteractions:
 
         C = np.zeros((N, M))
 
-        for ts in self.u.trajectory:
+        for _ts in self.u.trajectory:
             R1 = p1_ca.positions
             R2 = p2_ca.positions
 
@@ -231,12 +230,12 @@ class PPInteractions:
             ag1: AtomGroup of the first selection.
             ag2: AtomGroup of the second selection.
         """
-        mapping = {"ag1": {}, "ag2": {}}
+        mapping = {'ag1': {}, 'ag2': {}}
         for i, resid in enumerate(ag1.resids):
-            mapping["ag1"][i] = resid
+            mapping['ag1'][i] = resid
 
         for i, resid in enumerate(ag2.resids):
-            mapping["ag2"][i] = resid
+            mapping['ag2'][i] = resid
 
         self.mapping = mapping
 
@@ -256,8 +255,8 @@ class PPInteractions:
         seen = set()
         positive = list()
         for i in range(len(pos_corr[0])):
-            res1 = self.mapping["ag1"][pos_corr[0][i]]
-            res2 = self.mapping["ag2"][pos_corr[1][i]]
+            res1 = self.mapping['ag1'][pos_corr[0][i]]
+            res2 = self.mapping['ag2'][pos_corr[1][i]]
             if (res1, res2) not in seen:
                 positive.append((res1, res2))
                 seen.add((res1, res2))
@@ -265,8 +264,8 @@ class PPInteractions:
 
         negative = list()
         for i in range(len(neg_corr[0])):
-            res1 = self.mapping["ag1"][neg_corr[0][i]]
-            res2 = self.mapping["ag2"][neg_corr[1][i]]
+            res1 = self.mapping['ag1'][neg_corr[0][i]]
+            res2 = self.mapping['ag2'][neg_corr[1][i]]
             if (res1, res2) not in seen:
                 negative.append((res1, res2))
                 seen.add((res1, res2))
@@ -288,43 +287,43 @@ class PPInteractions:
             Tuple containing (list of function calls, list of labels).
         """
         int_types = {
-            "TYR": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "HIS": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "HID": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "HIE": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "SER": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "THR": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "ASN": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "GLN": {"funcs": [self.analyze_hbond], "label": ["hbond"]},
-            "ASP": {
-                "funcs": [self.analyze_hbond, self.analyze_saltbridge],
-                "label": ["hbond", "saltbridge"],
+            'TYR': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'HIS': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'HID': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'HIE': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'SER': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'THR': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'ASN': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'GLN': {'funcs': [self.analyze_hbond], 'label': ['hbond']},
+            'ASP': {
+                'funcs': [self.analyze_hbond, self.analyze_saltbridge],
+                'label': ['hbond', 'saltbridge'],
             },
-            "GLU": {
-                "funcs": [self.analyze_hbond, self.analyze_saltbridge],
-                "label": ["hbond", "saltbridge"],
+            'GLU': {
+                'funcs': [self.analyze_hbond, self.analyze_saltbridge],
+                'label': ['hbond', 'saltbridge'],
             },
-            "LYS": {
-                "funcs": [self.analyze_hbond, self.analyze_saltbridge],
-                "label": ["hbond", "saltbridge"],
+            'LYS': {
+                'funcs': [self.analyze_hbond, self.analyze_saltbridge],
+                'label': ['hbond', 'saltbridge'],
             },
-            "ARG": {
-                "funcs": [self.analyze_hbond, self.analyze_saltbridge],
-                "label": ["hbond", "saltbridge"],
+            'ARG': {
+                'funcs': [self.analyze_hbond, self.analyze_saltbridge],
+                'label': ['hbond', 'saltbridge'],
             },
-            "HIP": {
-                "funcs": [self.analyze_hbond, self.analyze_saltbridge],
-                "label": ["hbond", "saltbridge"],
+            'HIP': {
+                'funcs': [self.analyze_hbond, self.analyze_saltbridge],
+                'label': ['hbond', 'saltbridge'],
             },
         }
 
         funcs = defaultdict(lambda: [[], []])
         for res, calls in int_types.items():
-            funcs[res] = [calls["funcs"], calls["label"]]
+            funcs[res] = [calls['funcs'], calls['label']]
 
         functions = [self.analyze_hydrophobic]
-        labels = ["hydrophobic"]
-        for func, lab in zip(*funcs[res1]):
+        labels = ['hydrophobic']
+        for func, lab in zip(*funcs[res1], strict=True):
             if func in funcs[res2][0]:
                 functions.append(func)
                 labels.append(lab)
@@ -343,27 +342,27 @@ class PPInteractions:
         Returns:
             Proportion of simulation time spent in salt bridge contact.
         """
-        pos = ["LYS", "ARG"]
-        neg = ["ASP", "GLU"]
+        pos = ['LYS', 'ARG']
+        neg = ['ASP', 'GLU']
         name1 = res1.resnames[0]
         name2 = res2.resnames[0]
         if name1 not in pos + neg or name2 not in pos + neg or (name1 in pos and name2 in pos) or (name1 in neg and name2 in neg):
             return 0.0
 
-        atom_names = ["NZ", "NH1", "NH2", "OD1", "OD2", "OE1", "OE2"]
+        atom_names = ['NZ', 'NH1', 'NH2', 'OD1', 'OD2', 'OE1', 'OE2']
 
-        grp1 = self.u.select_atoms("resname DUMMY")
+        grp1 = self.u.select_atoms('resname DUMMY')
         for atom in res1.atoms:
             if atom.name in atom_names:
                 grp1 += atom
 
-        grp2 = self.u.select_atoms("resname DUMMY")
+        grp2 = self.u.select_atoms('resname DUMMY')
         for atom in res2.atoms:
             if atom.name in atom_names:
                 grp2 += atom
 
         n_frames = 0
-        for ts in self.u.trajectory:
+        for _ts in self.u.trajectory:
             dist = np.linalg.norm(grp1.positions - grp2.positions)
             if dist < self.sb:
                 n_frames += 1
@@ -387,7 +386,7 @@ class PPInteractions:
         donors, acceptors = self.survey_donors_acceptors(res1, res2)
 
         n_frames = 0
-        for ts in self.u.trajectory:
+        for _ts in self.u.trajectory:
             n_frames += self.evaluate_hbond(donors, acceptors)
 
         return n_frames / self.n_frames
@@ -405,19 +404,19 @@ class PPInteractions:
         Returns:
             Proportion of simulation time spent in hydrophobic contact.
         """
-        h1 = self.u.select_atoms("resname DUMMY")
-        h2 = self.u.select_atoms("resname DUMMY")
+        h1 = self.u.select_atoms('resname DUMMY')
+        h2 = self.u.select_atoms('resname DUMMY')
 
         for atom in res1.atoms:
-            if "C" in atom.type:
+            if 'C' in atom.type:
                 h1 += atom
 
         for atom in res2.atoms:
-            if "C" in atom.type:
+            if 'C' in atom.type:
                 h2 += atom
 
         n_frames = 0
-        for ts in self.u.trajectory:
+        for _ts in self.u.trajectory:
             da = distance_array(h1, h2)
             if np.min(da) < self.hydr:
                 n_frames += 1
@@ -441,18 +440,18 @@ class PPInteractions:
             Tuple of (donors, acceptors) AtomGroups containing atoms
             that pass the crude distance cutoff.
         """
-        donors = self.u.select_atoms("resname DUMMY")
-        acceptors = self.u.select_atoms("resname DUMMY")
+        donors = self.u.select_atoms('resname DUMMY')
+        acceptors = self.u.select_atoms('resname DUMMY')
 
         for atom in res1.atoms:
-            if any([a in atom.type for a in ["O", "N"]]):
-                if any(["H" in bond for bond in atom.bonded_atoms.types]):
+            if any([a in atom.type for a in ['O', 'N']]):
+                if any(['H' in bond for bond in atom.bonded_atoms.types]):
                     donors += atom
                 acceptors += atom
 
         for atom in res2.atoms:
-            if any([a in atom.type for a in ["O", "N"]]):
-                if any(["H" in bond for bond in atom.bonded_atoms.types]):
+            if any([a in atom.type for a in ['O', 'N']]):
+                if any(['H' in bond for bond in atom.bonded_atoms.types]):
                     donors += atom
                 acceptors += atom
 
@@ -479,7 +478,7 @@ class PPInteractions:
         """
         for d in donor.atoms:
             pos1 = d.position
-            hpos = [atom.position for atom in d.bonded_atoms if "H" in atom.type]
+            hpos = [atom.position for atom in d.bonded_atoms if 'H' in atom.type]
             for a in acceptor.atoms:
                 pos3 = a.position
 
@@ -502,7 +501,7 @@ class PPInteractions:
         Args:
             results: Dictionary of results to be saved.
         """
-        with open(self.out, "w") as fout:
+        with open(self.out, 'w') as fout:
             json.dump(results, fout, indent=4)
 
     def plot_results(self, results: Results) -> None:
@@ -517,16 +516,16 @@ class PPInteractions:
         """
         df = self.parse_results(results)
 
-        plot = Path("plots")
+        plot = Path('plots')
         plot.mkdir(exist_ok=True)
-        for cov_type in ["positive", "negative"]:
-            for int_type in ["Hydrophobic", "Hydrogen Bond", "Salt Bridge"]:
+        for cov_type in ['positive', 'negative']:
+            for int_type in ['Hydrophobic', 'Hydrogen Bond', 'Salt Bridge']:
                 data = df.filter(
-                    (pl.col("Covariance") == cov_type) & (pl.col(int_type) > 0.0)
+                    (pl.col('Covariance') == cov_type) & (pl.col(int_type) > 0.0)
                 )
 
                 if not data.is_empty():
-                    name = f"{cov_type.capitalize()}_Covariance_"
+                    name = f'{cov_type.capitalize()}_Covariance_'
                     name += f"{'_'.join(int_type.split(' '))}.png"
 
                     self.make_plot(data, int_type, plot / name)
@@ -549,11 +548,11 @@ class PPInteractions:
             for pair, data in pair_dict.items():
                 if any(val > 0.0 for val in data.values()):
                     row = {
-                        "Residue Pair": pair,
-                        "Hydrophobic": data["hydrophobic"],
-                        "Hydrogen Bond": data["hbond"],
-                        "Salt Bridge": data["saltbridge"],
-                        "Covariance": cov_type,
+                        'Residue Pair': pair,
+                        'Hydrophobic': data['hydrophobic'],
+                        'Hydrogen Bond': data['hbond'],
+                        'Salt Bridge': data['saltbridge'],
+                        'Covariance': cov_type,
                     }
 
                     data_rows.append(row)
@@ -571,15 +570,15 @@ class PPInteractions:
             name: Path to save the plot.
             fs: Font size for plot labels. Defaults to 15.
         """
-        fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+        _fig, ax = plt.subplots(1, 1, figsize=(6, 5))
 
-        sns.barplot(data=data, x="Residue Pair", y=column, ax=ax)
+        sns.barplot(data=data, x='Residue Pair', y=column, ax=ax)
 
-        ax.set_xlabel("Residue Pair", fontsize=fs)
-        ax.set_ylabel("Probability", fontsize=fs)
+        ax.set_xlabel('Residue Pair', fontsize=fs)
+        ax.set_ylabel('Probability', fontsize=fs)
         ax.set_title(column, fontsize=fs + 2)
         ax.tick_params(labelsize=fs)
-        ax.tick_params(axis="x", rotation=45)
+        ax.tick_params(axis='x', rotation=45)
 
         plt.tight_layout()
         plt.savefig(str(name), dpi=300)

@@ -126,7 +126,7 @@ def setup_worker_logger(self, worker_id: str, log_dir: Path) -> logging.Logger:
     """
     log_path = log_dir / f'{worker_id}.jsonl'
 
-    logger = logging.getLogger(f'task.{task_id}')
+    logger = logging.getLogger(f'task.{worker_id}')
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
 

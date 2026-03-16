@@ -34,13 +34,13 @@ def configure_logging(
     Example:
         >>> configure_logging(level="DEBUG", to_file="simulation.log")
     """
-    level = level or os.getenv("MS_LOG_LEVEL") or "INFO"
+    level = level or os.getenv('MS_LOG_LEVEL') or 'INFO'
     fmt = (
         fmt
-        or os.getenv("MS_LOG_FMT")
+        or os.getenv('MS_LOG_FMT')
         or (
-            "%(asctime)s | %(levelname)s | %(name)s | %(message)s "
-            "[host=%(hostname)s pid=%(process)d rank=%(mpirank)s]"
+            '%(asctime)s | %(levelname)s | %(name)s | %(message)s '
+            '[host=%(hostname)s pid=%(process)d rank=%(mpirank)s]'
         )
     )
 
@@ -67,33 +67,33 @@ def configure_logging(
             return True
 
     handlers = {
-        "console": {
-            "class": "logging.StreamHandler",
-            "level": level,
-            "filters": ["ctx"],
-            "formatter": "standard",
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': level,
+            'filters': ['ctx'],
+            'formatter': 'standard',
         }
     }
 
-    if to_file or os.getenv("MS_LOG_FILE"):
-        handlers["file"] = {
-            "class": "logging.handlers.RotatingFileHandler",
-            "level": level,
-            "filters": ["ctx"],
-            "formatter": "standard",
-            "filename": to_file or os.getenv("MS_LOG_FILE"),
-            "maxBytes": 10 * 1024 * 1024,
-            "backupCount": 3,
-            "encoding": "utf-8",
+    if to_file or os.getenv('MS_LOG_FILE'):
+        handlers['file'] = {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'level': level,
+            'filters': ['ctx'],
+            'formatter': 'standard',
+            'filename': to_file or os.getenv('MS_LOG_FILE'),
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 3,
+            'encoding': 'utf-8',
         }
 
     config = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "filters": {"ctx": {"()": _ContextFilter}},
-        "formatters": {"standard": {"format": fmt}},
-        "handlers": handlers,
-        "root": {"level": level, "handlers": list(handlers)},
+        'version': 1,
+        'disable_existing_loggers': False,
+        'filters': {'ctx': {'()': _ContextFilter}},
+        'formatters': {'standard': {'format': fmt}},
+        'handlers': handlers,
+        'root': {'level': level, 'handlers': list(handlers)},
     }
 
     logging.config.dictConfig(config)

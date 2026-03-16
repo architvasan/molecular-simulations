@@ -6,13 +6,11 @@ PDB files, particularly for visualization of per-residue properties.
 
 import shutil
 from pathlib import Path
-from typing import Union
 
 import MDAnalysis as mda
 import numpy as np
 
-OptPath = Union[Path, str, None]
-
+OptPath = Path | str | None
 
 class EmbedData:
     """Embed data into the beta-factor column of a PDB file.
@@ -37,8 +35,8 @@ class EmbedData:
         out: Output path. If None, uses the input PDB path.
 
     Example:
-        >>> data = {"protein": np.random.rand(100)}  # 100 residues
-        >>> embedder = EmbedData("structure.pdb", data)
+        >>> data = {'protein': np.random.rand(100)}  # 100 residues
+        >>> embedder = EmbedData('structure.pdb', data)
         >>> embedder.embed()
     """
 
@@ -79,7 +77,7 @@ class EmbedData:
         """
         sel = self.u.select_atoms(selection)
 
-        for residue, datum in zip(sel.residues, data):
+        for residue, datum in zip(sel.residues, data, strict=True):
             residue.atoms.tempfactors = np.full(residue.atoms.tempfactors.shape, datum)
 
     def write_new_pdb(self) -> None:
@@ -89,9 +87,8 @@ class EmbedData:
         original PDB with '.orig.pdb' extension (only if backup doesn't
         already exist to prevent overwriting the true original).
         """
-        if self.out.exists():
-            if not self.pdb.with_suffix(".orig.pdb").exists():
-                shutil.copyfile(str(self.pdb), str(self.pdb.with_suffix(".orig.pdb")))
+        if self.out.exists() and not self.pdb.with_suffix('orig.pdb').exists():
+            shutil.copyfile(str(self.pdb), str(self.pdb.with_suffix('.orig.pdb')))
 
         with mda.Writer(str(self.out)) as W:
             W.write(self.u.atoms)
@@ -112,8 +109,8 @@ class EmbedEnergyData(EmbedData):
         out: Output path. If None, uses the input PDB path.
 
     Example:
-        >>> energies = {"chainA": energy_array}  # shape (n_frames, n_res, 2)
-        >>> embedder = EmbedEnergyData("structure.pdb", energies)
+        >>> energies = {'chainA': energy_array}  # shape (n_frames, n_res, 2)
+        >>> embedder = EmbedEnergyData('structure.pdb', energies)
         >>> embedder.embed()
     """
 
@@ -142,7 +139,7 @@ class EmbedEnergyData(EmbedData):
         """
         new_embeddings = dict()
         all_data = []
-        for sel, data in self.embeddings.items():
+        for data in self.embeddings.values():
             sanitized = self.sanitize_data(data)
             all_data.append(sanitized)
 

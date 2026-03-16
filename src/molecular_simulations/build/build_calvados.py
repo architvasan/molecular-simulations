@@ -7,20 +7,15 @@ Classes:
     CGBuilder: Build CALVADOS simulation systems from PDB structures.
 """
 
-from calvados.cfg import Components, Config
-
-try:
-    import tomllib  # Python 3.11+
-except ModuleNotFoundError:
-    pass  # Python 3.10
 from pathlib import Path
-from typing import TypeVar, Union
+from typing import TypeVar
 
 import yaml
+from calvados.cfg import Components, Config
 
-_T = TypeVar("_T")
-OptPath = Union[Path, str, None]
-PathLike = Union[Path, str]
+_T = TypeVar('_T')
+OptPath = Path | str | None
+PathLike = Path | str
 
 
 class CGBuilder:
@@ -91,18 +86,18 @@ class CGBuilder:
         temp: float = 310.0,
         ion_conc: float = 0.15,
         pH: float = 7.4,
-        topol: str = "center",
+        topol: str = 'center',
         dcd_freq: int = 2000,
         n_steps: int = 10_000_000,
-        platform: str = "CUDA",
-        restart: str = "checkpoint",
-        frestart: str = "restart.chk",
+        platform: str = 'CUDA',
+        restart: str = 'checkpoint',
+        frestart: str = 'restart.chk',
         verbose: bool = True,
-        molecule_type: str = "protein",
+        molecule_type: str = 'protein',
         nmol: int = 1,
         restraint: bool = True,
-        charge_termini: str = "end-capped",
-        restraint_type: str = "harmonic",
+        charge_termini: str = 'end-capped',
+        restraint_type: str = 'harmonic',
         use_com: bool = True,
         colabfold: int = 0,
         k_harmonic: float = 700.0,
@@ -152,33 +147,33 @@ class CGBuilder:
             ...     params = tomllib.load(f)
             >>> builder = CGBuilder.from_dict(params)
         """
-        conf_args = cg_params["config"]
-        comp_args = cg_params["components"]
+        conf_args = cg_params['config']
+        comp_args = cg_params['components']
 
-        path = Path(conf_args["path"])
-        input_pdb = conf_args["input_pdb"]
-        residues_file = comp_args["residues_file"]
-        domains_file = comp_args["domains_file"]
-        box_dim = conf_args["box_dim"]
-        temp = conf_args["temp"]
-        ion_conc = conf_args["ion_conc"]
-        pH = conf_args["pH"]
-        topol = conf_args["topol"]
-        dcd_freq = conf_args["dcd_freq"]
-        n_steps = conf_args["n_steps"]
-        platform = conf_args["platform"]
-        restart = conf_args["restart"]
-        frestart = conf_args["frestart"]
-        verbose = conf_args["verbose"]
+        path = Path(conf_args['path'])
+        input_pdb = conf_args['input_pdb']
+        residues_file = comp_args['residues_file']
+        domains_file = comp_args['domains_file']
+        box_dim = conf_args['box_dim']
+        temp = conf_args['temp']
+        ion_conc = conf_args['ion_conc']
+        pH = conf_args['pH']
+        topol = conf_args['topol']
+        dcd_freq = conf_args['dcd_freq']
+        n_steps = conf_args['n_steps']
+        platform = conf_args['platform']
+        restart = conf_args['restart']
+        frestart = conf_args['frestart']
+        verbose = conf_args['verbose']
 
-        molecule_type = comp_args["molecule_type"]
-        nmol = comp_args["nmol"]
-        restraint = comp_args["restraint"]
-        charge_termini = comp_args["charge_termini"]
-        restraint_type = comp_args["restraint_type"]
-        use_com = comp_args["use_com"]
-        colabfold = comp_args["colabfold"]
-        k_harmonic = comp_args["k_harmonic"]
+        molecule_type = comp_args['molecule_type']
+        nmol = comp_args['nmol']
+        restraint = comp_args['restraint']
+        charge_termini = comp_args['charge_termini']
+        restraint_type = comp_args['restraint_type']
+        use_com = comp_args['use_com']
+        colabfold = comp_args['colabfold']
+        k_harmonic = comp_args['k_harmonic']
 
         return cls(
             path,
@@ -236,7 +231,7 @@ class CGBuilder:
             verbose=self.verbose,
         )
 
-        with open(f"{self.path}/config.yaml", "w") as f:
+        with open(f'{self.path}/config.yaml', 'w') as f:
             yaml.dump(config.config, f)
 
     def write_components(self) -> None:
@@ -260,5 +255,5 @@ class CGBuilder:
         )
         components.add(name=self.input_pdb.stem)
 
-        with open(f"{self.path}/components.yaml", "w") as f:
+        with open(f'{self.path}/components.yaml', 'w') as f:
             yaml.dump(components.components, f)

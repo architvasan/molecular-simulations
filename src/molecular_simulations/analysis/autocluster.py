@@ -6,7 +6,7 @@ trajectory data using KMeans++ with dimensionality reduction.
 
 import json
 from pathlib import Path
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 import numpy as np
 import polars as pl
@@ -15,8 +15,8 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from tqdm import tqdm
 
-PathLike = Union[Path, str]
-_T = TypeVar("_T")
+PathLike = Path | str
+_T = TypeVar('_T')
 
 
 class GenericDataloader:
@@ -197,12 +197,12 @@ class AutoKMeans:
     def __init__(
         self,
         data_directory: PathLike,
-        pattern: str = "",
+        pattern: str = '',
         dataloader: type[_T] = GenericDataloader,
         max_clusters: int = 10,
         stride: int = 1,
-        reduction_algorithm: str = "PCA",
-        reduction_kws: dict[str, Any] = {"n_components": 2},
+        reduction_algorithm: str = 'PCA',
+        reduction_kws: dict[str, Any] = {'n_components': 2}, # noqa: B006
     ):
         """Initialize the automatic clustering workflow.
 
@@ -216,7 +216,7 @@ class AutoKMeans:
             reduction_kws: Arguments for the reduction algorithm.
         """
         self.data_dir = Path(data_directory)
-        self.dataloader = dataloader(list(self.data_dir.glob(f"{pattern}*.npy")))
+        self.dataloader = dataloader(list(self.data_dir.glob(f'{pattern}*.npy')))
         self.data = self.dataloader.data
         self.shape = self.dataloader.shape
 
@@ -263,7 +263,7 @@ class AutoKMeans:
             total=len(n_clusters),
             position=0,
             leave=False,
-            desc="Sweeping `n_clusters`",
+            desc='Sweeping `n_clusters`',
         ):
             clusterer = KMeans(n_clusters=n)
             labels = clusterer.fit_predict(self.reduced)
@@ -301,7 +301,7 @@ class AutoKMeans:
         Writes the cluster_centers dictionary to 'cluster_centers.json'
         in the data directory.
         """
-        with open(str(self.data_dir / "cluster_centers.json"), "w") as fout:
+        with open(str(self.data_dir / 'cluster_centers.json'), 'w') as fout:
             json.dump(self.cluster_centers, fout, indent=4)
 
     def save_labels(self) -> None:
@@ -317,15 +317,15 @@ class AutoKMeans:
             shapes = [shape[0] for shape in self.dataloader.shape]
 
         df = pl.DataFrame()
-        for file, shape in zip(files, shapes):
+        for file, shape in zip(files, shapes, strict=True):
             temp = pl.DataFrame(
-                {"system": [file.name] * shape, "frame": np.arange(shape)}
+                {'system': [file.name] * shape, 'frame': np.arange(shape)}
             )
-            df = pl.concat([df, temp], how="vertical")
+            df = pl.concat([df, temp], how='vertical')
 
-        df = df.with_columns(pl.Series(self.labels).alias("cluster"))
+        df = df.with_columns(pl.Series(self.labels).alias('cluster'))
 
-        df.write_parquet(str(self.data_dir / "cluster_assignments.parquet"))
+        df.write_parquet(str(self.data_dir / 'cluster_assignments.parquet'))
 
 
 class Decomposition:
@@ -358,7 +358,7 @@ class Decomposition:
         Raises:
             KeyError: If an unsupported algorithm is specified.
         """
-        algorithms = {"PCA": PCA, "TICA": None, "UMAP": None}
+        algorithms = {'PCA': PCA, 'TICA': None, 'UMAP': None}
 
         self.decomposer = algorithms[algorithm](**kwargs)
 

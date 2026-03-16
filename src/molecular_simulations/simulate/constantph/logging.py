@@ -12,9 +12,9 @@ def setup_task_logger(run_id: str, task_id: str, log_dir: str) -> logging.Logger
     task_log_dir = Path(log_dir) / run_id / prefix
     task_log_dir.mkdir(parents=True, exist_ok=True)
 
-    log_path = task_log_dir / f"{task_id}.jsonl"
+    log_path = task_log_dir / f'{task_id}.jsonl'
 
-    logger = logging.getLogger(f"task.{task_id}")
+    logger = logging.getLogger(f'task.{task_id}')
     logger.setLevel(logging.DEBUG)
     logger.handlers.clear()
 
@@ -35,37 +35,37 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record) -> str:
         entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "run_id": self.run_id,
-            "task_id": self.task_id,
-            "level": record.levelname,
-            "message": record.getMessage(),
+            'timestamp': datetime.utcnow().isoformat(),
+            'run_id': self.run_id,
+            'task_id': self.task_id,
+            'level': record.levelname,
+            'message': record.getMessage(),
         }
 
         # Merge in any extra fields passed via extra={}
         for key, val in record.__dict__.items():
             if key not in (
-                "msg",
-                "args",
-                "levelname",
-                "levelno",
-                "pathname",
-                "filename",
-                "module",
-                "lineno",
-                "funcName",
-                "created",
-                "msecs",
-                "relativeCreated",
-                "thread",
-                "threadName",
-                "processName",
-                "process",
-                "message",
-                "exc_info",
-                "exc_text",
-                "stack_info",
-                "name",
+                'msg',
+                'args',
+                'levelname',
+                'levelno',
+                'pathname',
+                'filename',
+                'module',
+                'lineno',
+                'funcName',
+                'created',
+                'msecs',
+                'relativeCreated',
+                'thread',
+                'threadName',
+                'processName',
+                'process',
+                'message',
+                'exc_info',
+                'exc_text',
+                'stack_info',
+                'name',
             ):
                 entry[key] = val
 

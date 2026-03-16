@@ -25,8 +25,8 @@ class RCReporter:
                 reaction coordinate as dist(i,k) - dist(j,k).
             rc0: Target reaction coordinate value for the current window.
         """
-        self.file = open(file, "w")
-        self.file.write("rc0,rc,dist_ik, dist_jk\n")
+        self.file = open(file, 'w')
+        self.file.write('rc0,rc,dist_ik, dist_jk\n')
 
         self.report_interval = report_interval
         self.atom_indices = atom_indices
@@ -68,5 +68,5 @@ class RCReporter:
 
         rc = dist_ik - dist_jk
 
-        self.file.write(f"{self.rc0},{rc},{dist_ik},{dist_jk}\n")
+        self.file.write(f'{self.rc0},{rc},{dist_ik},{dist_jk}\n')
         self.file.flush()

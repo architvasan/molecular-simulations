@@ -7,11 +7,10 @@ Supports both static models and dynamic trajectory analysis.
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Union
 
 import mdtraj as md
 import numpy as np
-from openmm import Context, Platform, System, VerletIntegrator
+from openmm import Context, NonbondedForce, Platform, System, VerletIntegrator
 from openmm.app import (
     AmberPrmtopFile,
     CutoffNonPeriodic,
@@ -24,8 +23,7 @@ from openmm.unit import kilocalories_per_mole, nanometers, picosecond
 from pdbfixer import PDBFixer
 from tqdm import tqdm
 
-PathLike = Union[Path, str]
-
+PathLike = Path | str
 
 class InteractionEnergy(ABC):
     """Abstract base class for interaction energy calculations.
@@ -33,6 +31,7 @@ class InteractionEnergy(ABC):
     Defines the interface for all interaction energy calculation classes.
     """
 
+    @abstractmethod
     def __init__(self):
         """Initialize the InteractionEnergy base class."""
         pass
@@ -98,8 +97,8 @@ class StaticInteractionEnergy(InteractionEnergy):
     def __init__(
         self,
         pdb: str,
-        chain: str = "A",
-        platform: str = "CUDA",
+        chain: str = 'A',
+        platform: str = 'CUDA',
         first_residue: int | None = None,
         last_residue: int | None = None,
     ):
@@ -129,7 +128,7 @@ class StaticInteractionEnergy(InteractionEnergy):
         """
         pdb = PDBFile(self.pdb)
         positions, topology = pdb.positions, pdb.topology
-        forcefield = ForceField("amber14-all.xml", "implicit/gbn2.xml")
+        forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
         try:
             system = forcefield.createSystem(
                 topology, soluteDielectric=1.0, solventDielectric=80.0
@@ -165,31 +164,31 @@ class StaticInteractionEnergy(InteractionEnergy):
         for force in system.getForces():
             if isinstance(force, NonbondedForce):
                 force.setForceGroup(0)
-                force.addGlobalParameter("solute_coulomb_scale", 1)
-                force.addGlobalParameter("solute_lj_scale", 1)
-                force.addGlobalParameter("solvent_coulomb_scale", 1)
-                force.addGlobalParameter("solvent_lj_scale", 1)
+                force.addGlobalParameter('solute_coulomb_scale', 1)
+                force.addGlobalParameter('solute_lj_scale', 1)
+                force.addGlobalParameter('solvent_coulomb_scale', 1)
+                force.addGlobalParameter('solvent_lj_scale', 1)
 
                 for i in range(force.getNumParticles()):
                     charge, sigma, epsilon = force.getParticleParameters(i)
                     force.setParticleParameters(i, 0, 0, 0)
                     if i in self.selection:
                         force.addParticleParameterOffset(
-                            "solute_coulomb_scale", i, charge, 0, 0
+                            'solute_coulomb_scale', i, charge, 0, 0
                         )
                         force.addParticleParameterOffset(
-                            "solute_lj_scale", i, 0, sigma, epsilon
+                            'solute_lj_scale', i, 0, sigma, epsilon
                         )
                     else:
                         force.addParticleParameterOffset(
-                            "solvent_coulomb_scale", i, charge, 0, 0
+                            'solvent_coulomb_scale', i, charge, 0, 0
                         )
                         force.addParticleParameterOffset(
-                            "solvent_lj_scale", i, 0, sigma, epsilon
+                            'solvent_lj_scale', i, 0, sigma, epsilon
                         )
 
                 for i in range(force.getNumExceptions()):
-                    p1, p2, chargeProd, sigma, epsilon = force.getExceptionParameters(i)
+                    p1, p2, _, _, _ = force.getExceptionParameters(i)
                     force.setExceptionParameters(i, p1, p2, 0, 0, 0)
 
             else:
@@ -295,10 +294,10 @@ class StaticInteractionEnergy(InteractionEnergy):
         Returns:
             Computed energy term with units.
         """
-        context.setParameter("solute_coulomb_scale", solute_coulomb_scale)
-        context.setParameter("solute_lj_scale", solute_lj_scale)
-        context.setParameter("solvent_coulomb_scale", solvent_coulomb_scale)
-        context.setParameter("solvent_lj_scale", solvent_lj_scale)
+        context.setParameter('solute_coulomb_scale', solute_coulomb_scale)
+        context.setParameter('solute_lj_scale', solute_lj_scale)
+        context.setParameter('solvent_coulomb_scale', solvent_coulomb_scale)
+        context.setParameter('solvent_lj_scale', solvent_lj_scale)
         return context.getState(getEnergy=True, groups={0}).getPotentialEnergy()
 
 
@@ -327,8 +326,8 @@ class InteractionEnergyFrame(StaticInteractionEnergy):
         self,
         system: System,
         top: Topology,
-        chain: str = "A",
-        platform: str = "CUDA",
+        chain: str = 'A',
+        platform: str = 'CUDA',
         first_residue: int | None = None,
         last_residue: int | None = None,
     ):
@@ -342,7 +341,7 @@ class InteractionEnergyFrame(StaticInteractionEnergy):
             first_residue: Starting residue for calculation.
             last_residue: Ending residue for calculation.
         """
-        super().__init__("", chain, platform, first_residue, last_residue)
+        super().__init__('', chain, platform, first_residue, last_residue)
         self.system = system
         self.top = top
 
@@ -394,8 +393,8 @@ class DynamicInteractionEnergy:
         top: PathLike,
         traj: PathLike,
         stride: int = 1,
-        chain: str = "A",
-        platform: str = "CUDA",
+        chain: str = 'A',
+        platform: str = 'CUDA',
         first_residue: int | None = None,
         last_residue: int | None = None,
         progress_bar: bool = False,
@@ -461,14 +460,14 @@ class DynamicInteractionEnergy:
         Raises:
             NotImplementedError: If topology file type is not supported.
         """
-        if top.suffix == ".pdb":
+        if top.suffix == '.pdb':
             top = PDBFile(str(top)).topology
             self.top = top
-            forcefield = ForceField("amber14-all.xml", "implicit/gbn2.xml")
+            forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
             return forcefield.createSystem(
                 top, soluteDielectric=1.0, solventDielectric=78.5
             )
-        elif top.suffix == ".prmtop":
+        elif top.suffix == '.prmtop':
             top = AmberPrmtopFile(str(top))
             self.top = top
             return top.createSystem(
@@ -477,7 +476,7 @@ class DynamicInteractionEnergy:
                 constraints=HBonds,
             )
         else:
-            raise NotImplementedError(f"Error! Topology type {top} not implemented!")
+            raise NotImplementedError(f'Error! Topology type {top} not implemented!')
 
     def load_traj(self, top: PathLike, traj: PathLike) -> np.ndarray:
         """Load trajectory into mdtraj and extract coordinates.

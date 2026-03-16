@@ -14,7 +14,7 @@ from MDAnalysis.core import groups
 from MDAnalysis.guesser.tables import vdwradii
 from scipy.spatial import KDTree
 
-warnings.filterwarnings("ignore")
+warnings.filterwarnings('ignore')
 
 
 class SASA(AnalysisBase):
@@ -68,13 +68,13 @@ class SASA(AnalysisBase):
             **kwargs: Arguments for AnalysisBase.
         """
         if isinstance(ag, groups.UpdatingAtomGroup):
-            raise TypeError("UpdatingAtomGroups are not valid for SASA!")
+            raise TypeError('UpdatingAtomGroups are not valid for SASA!')
 
         super().__init__(ag.universe.trajectory, **kwargs)
 
-        if not hasattr(ag, "elements"):
+        if not hasattr(ag, 'elements'):
             raise ValueError(
-                "Cannot assign atomic radii: Universe has no `elements` property!"
+                'Cannot assign atomic radii: Universe has no `elements` property!'
             )
 
         self.ag = ag
@@ -219,8 +219,8 @@ class RelativeSASA(SASA):
             n_points: Number of sphere points.
             **kwargs: Arguments for AnalysisBase.
         """
-        if not hasattr(ag, "bonds"):
-            raise ValueError("Universe has no `bonds` property!")
+        if not hasattr(ag, 'bonds'):
+            raise ValueError('Universe has no `bonds` property!')
         super().__init__(ag, probe_radius, n_points, **kwargs)
 
     def _prepare(self):
@@ -246,7 +246,7 @@ class RelativeSASA(SASA):
         self.results.sasa += result
 
         for res_index in self.ag.residues.resindices:
-            tri_peptide = self.ag.select_atoms(f"byres (bonded resindex {res_index})")
+            tri_peptide = self.ag.select_atoms(f'byres (bonded resindex {res_index})')
 
             if len(tri_peptide) == 0:
                 continue
@@ -255,7 +255,7 @@ class RelativeSASA(SASA):
             exposed_area = sum(
                 [
                     a
-                    for a, _id in zip(tri_pep_area, tri_peptide.resindices)
+                    for a, _id in zip(tri_pep_area, tri_peptide.resindices, strict=True)
                     if _id == res_index
                 ]
             )

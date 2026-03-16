@@ -6,7 +6,6 @@ Lennard-Jones contributions at the residue level.
 """
 
 from pathlib import Path
-from typing import Union
 
 import MDAnalysis as mda
 import numpy as np
@@ -14,9 +13,8 @@ import openmm
 from numba import njit
 from openmm.app import AmberPrmtopFile
 
-OptPath = Union[Path, str, None]
-PathLike = Union[Path, str]
-
+OptPath = Path | str | None
+PathLike = Path | str
 
 @njit
 def unravel_index(n1: int, n2: int) -> tuple[np.ndarray, np.ndarray]:
@@ -295,7 +293,7 @@ class Fingerprinter:
         self,
         topology: PathLike,
         trajectory: OptPath = None,
-        target_selection: str = "segid A",
+        target_selection: str = 'segid A',
         binder_selection: str | None = None,
         out_path: OptPath = None,
         out_name: str | None = None,
@@ -317,17 +315,10 @@ class Fingerprinter:
         if binder_selection is not None:
             self.binder_selection = binder_selection
         else:
-            self.binder_selection = f"not {target_selection}"
+            self.binder_selection = f'not {target_selection}'
 
-        if out_path is None:
-            path = self.topology.parent
-        else:
-            path = Path(out_path)
-
-        if out_name is None:
-            self.out = path / "fingerprint.npz"
-        else:
-            self.out = path / out_name
+        path = self.topology.parent if out_path is None else Path(out_path)
+        self.out = path / 'fingerprint.npz' if out_name is None else path / out_name
 
     def assign_nonbonded_params(self) -> None:
         """Extract nonbonded parameters from the topology.
@@ -337,9 +328,9 @@ class Fingerprinter:
         """
         system = AmberPrmtopFile(self.topology).createSystem()
 
-        nonbonded = [
+        nonbonded = next(iter(
             f for f in system.getForces() if isinstance(f, openmm.NonbondedForce)
-        ][0]
+        ))
 
         self.epsilons = np.zeros(system.getNumParticles())
         self.sigmas = np.zeros(system.getNumParticles())
@@ -358,15 +349,15 @@ class Fingerprinter:
         will look for inpcrd or rst7 coordinates if trajectory was not
         specified.
         """
-        if self.topology.suffix == ".pdb":
+        if self.topology.suffix == '.pdb':
             self.u = mda.Universe(self.topology)
         else:
             if self.trajectory is not None:
                 coordinates = self.trajectory
-            elif self.topology.with_suffix(".inpcrd").exists():
-                coordinates = self.topology.with_suffix(".inpcrd")
+            elif self.topology.with_suffix('.inpcrd').exists():
+                coordinates = self.topology.with_suffix('.inpcrd')
             else:
-                coordinates = self.topology.with_suffix(".rst7")
+                coordinates = self.topology.with_suffix('.rst7')
 
             self.u = mda.Universe(self.topology, coordinates)
 
@@ -398,7 +389,7 @@ class Fingerprinter:
             (len(self.u.trajectory), len(self.binder_resmap), 2)
         )
 
-        for i, ts in enumerate(self.u.trajectory):
+        for i, _ts in enumerate(self.u.trajectory):
             self.calculate_fingerprints(i)
 
     def calculate_fingerprints(self, frame_index: int) -> None:

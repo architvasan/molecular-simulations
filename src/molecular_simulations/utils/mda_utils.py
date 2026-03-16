@@ -25,7 +25,7 @@ def trim_trajectory(
 
     if align:
         if align_sel is None:
-            align_idx = selection.select_atoms("backbone or nucleicbackbone").ix
+            align_idx = selection.select_atoms('backbone or nucleicbackbone').ix
         else:
             align_idx = selection.select_atoms(align_sel).ix
 

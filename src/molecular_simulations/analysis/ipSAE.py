@@ -1,3 +1,4 @@
+# ruff: noqa: N801, N999
 """Interface prediction Score from Aligned Errors (ipSAE) module.
 
 This module computes interaction prediction scores from pLDDT and PAE data,
@@ -7,15 +8,14 @@ from structure prediction tools like Boltz and AlphaFold.
 
 from itertools import permutations
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 import polars as pl
 from scipy.spatial.distance import cdist
 
-PathLike = Union[Path, str]
-OptPath = Union[Path, str, None]
-
+PathLike = Path | str
+OptPath = Path | str | None
 
 class ipSAE:
     """Compute interaction prediction Score from Aligned Errors.
@@ -73,10 +73,10 @@ class ipSAE:
         """
         self.parser.parse_structure_file()
         self.parser.classify_chains()
-        self.coordinates = np.vstack([res["coor"] for res in self.parser.residues])
+        self.coordinates = np.vstack([res['coor'] for res in self.parser.residues])
         if self.parser.cb_residues:
             self.cb_coordinates = np.vstack(
-                [res["coor"] for res in self.parser.cb_residues]
+                [res['coor'] for res in self.parser.cb_residues]
             )
         else:
             self.cb_coordinates = self.coordinates
@@ -122,7 +122,7 @@ class ipSAE:
 
     def save_scores(self) -> None:
         """Save scores DataFrame to a Parquet file."""
-        self.scores.write_parquet(self.path / "ipSAE_scores.parquet")
+        self.scores.write_parquet(self.path / 'ipSAE_scores.parquet')
 
     def load_pLDDT_file(self) -> np.ndarray:
         """Load and scale pLDDT data.
@@ -131,7 +131,7 @@ class ipSAE:
             pLDDT array scaled to 0-100 range.
         """
         data = np.load(self.plddt_file)
-        pLDDT_arr = data["plddt"]
+        pLDDT_arr = data['plddt']
         if np.max(pLDDT_arr) <= 1.0:
             pLDDT_arr = pLDDT_arr * 100.0
         return pLDDT_arr
@@ -142,7 +142,7 @@ class ipSAE:
         Returns:
             PAE array from the 'pae' key in the npz file.
         """
-        data = np.load(self.pae_file)["pae"]
+        data = np.load(self.pae_file)['pae']
         return data
 
 
@@ -229,13 +229,13 @@ class ScoreCalculator:
         self.df = pl.DataFrame(
             np.array(results),
             schema={
-                "chain1": str,
-                "chain2": str,
-                "pDockQ": float,
-                "pDockQ2": float,
-                "LIS": float,
-                "ipTM": float,
-                "ipSAE": float,
+                'chain1': str,
+                'chain2': str,
+                'pDockQ': float,
+                'pDockQ2': float,
+                'LIS': float,
+                'ipTM': float,
+                'ipSAE': float,
             },
         )
         self.get_max_values()
@@ -326,12 +326,12 @@ class ScoreCalculator:
         Returns:
             Tuple of (ipTM, ipSAE) scores.
         """
-        pair_type = "protein"
+        pair_type = 'protein'
         if (
-            self.chain_pair_type[chain1] == "nucleic_acid"
-            or self.chain_pair_type[chain2] == "nucleic_acid"
+            self.chain_pair_type[chain1] == 'nucleic_acid'
+            or self.chain_pair_type[chain2] == 'nucleic_acid'
         ):
-            pair_type = "nucleic_acid"
+            pair_type = 'nucleic_acid'
 
         mask_c1 = self.chains == chain1
         mask_c2 = self.chains == chain2
@@ -378,14 +378,14 @@ class ScoreCalculator:
         """
         self.scores = (
             self.df.with_columns(
-                pl.when(pl.col("chain1") < pl.col("chain2"))
-                .then(pl.concat_str(["chain1", "chain2"], separator="_"))
-                .otherwise(pl.concat_str(["chain2", "chain1"], separator="_"))
-                .alias("pair_key")
+                pl.when(pl.col('chain1') < pl.col('chain2'))
+                .then(pl.concat_str(['chain1', 'chain2'], separator='_'))
+                .otherwise(pl.concat_str(['chain2', 'chain1'], separator='_'))
+                .alias('pair_key')
             )
-            .sort("ipSAE", descending=True)
-            .unique(subset=["pair_key"], keep="first")
-            .drop("pair_key")
+            .sort('ipSAE', descending=True)
+            .unique(subset=['pair_key'], keep='first')
+            .drop('pair_key')
         )
 
     def permute_chains(self) -> None:
@@ -459,7 +459,7 @@ class ScoreCalculator:
         L = max(27, L)
 
         min_value = 1.0
-        if pair_type == "nucleic_acid":
+        if pair_type == 'nucleic_acid':
             min_value = 2.0
 
         return max(min_value, 1.24 * (L - 15) ** (1 / 3) - 1.8)
@@ -482,7 +482,7 @@ class ScoreCalculator:
         L = np.maximum(26.0, L)
 
         min_value = 1.0
-        if pair_type == "nucleic_acid":
+        if pair_type == 'nucleic_acid':
             min_value = 2.0
 
         return np.maximum(min_value, 1.24 * (L - 15) ** (1 / 3) - 1.8)
@@ -530,7 +530,7 @@ class ModelParser:
         Identifies file type and parses line by line, storing data for
         C-alpha, C-beta, C1', and C3' atoms.
         """
-        if self.structure.suffix == ".pdb":
+        if self.structure.suffix == '.pdb':
             line_parser = self.parse_pdb_line
         else:
             line_parser = self.parse_cif_line
@@ -541,34 +541,34 @@ class ModelParser:
             lines = f.readlines()
 
         for line in lines:
-            if line.startswith("_atom_site."):
-                _, field_name = line.strip().split(".")
+            if line.startswith('_atom_site.'):
+                _, field_name = line.strip().split('.')
                 fields[field_name] = field_num
                 field_num += 1
 
-            if line.startswith(("ATOM", "HETATM")):
+            if line.startswith(('ATOM', 'HETATM')):
                 atom = line_parser(line, fields)
                 if atom is None:
                     self.token_mask.append(0)
                     continue
 
-                name = atom["atom_name"]
-                if name == "CA" or "C1" in name:
+                name = atom['atom_name']
+                if name == 'CA' or 'C1' in name:
                     self.token_mask.append(1)
                     self.residues.append(atom)
-                    self.chains.append(atom["chain_id"])
+                    self.chains.append(atom['chain_id'])
 
                 if (
-                    name == "CB"
-                    or "C3" in name
-                    or (atom["res"] == "GLY" and name == "CA")
+                    name == 'CB'
+                    or 'C3' in name
+                    or (atom['res'] == 'GLY' and name == 'CA')
                 ):
                     self.cb_residues.append(atom)
 
                 if (
-                    name != "CA"
-                    and "C1" not in name
-                    and atom["res"] not in self.STANDARD_RESIDUES
+                    name != 'CA'
+                    and 'C1' not in name
+                    and atom['res'] not in self.STANDARD_RESIDUES
                 ):
                     self.token_mask.append(0)
 
@@ -578,24 +578,24 @@ class ModelParser:
         Reads through residue data to assign chain identity based on
         whether nucleic acid residues are detected.
         """
-        self.residue_types = np.array([res["res"] for res in self.residues])
+        self.residue_types = np.array([res['res'] for res in self.residues])
         unique_chains = np.unique(self.chains)
         chains_array = np.array(self.chains)
-        self.chain_types = {chain: "protein" for chain in unique_chains}
+        self.chain_types = {chain: 'protein' for chain in unique_chains}
         for chain in unique_chains:
             indices = np.where(chains_array == chain)[0]
             chain_residues = self.residue_types[indices]
             if set(chain_residues) & self.NUCLEIC_ACIDS:
-                self.chain_types[chain] = "nucleic_acid"
+                self.chain_types[chain] = 'nucleic_acid'
 
-    NUCLEIC_ACIDS = frozenset(["DA", "DC", "DT", "DG", "A", "C", "U", "G"])
+    NUCLEIC_ACIDS = frozenset(['DA', 'DC', 'DT', 'DG', 'A', 'C', 'U', 'G'])
 
     STANDARD_RESIDUES = frozenset([
-        "ALA", "ARG", "ASN", "ASP", "CYS",
-        "GLN", "GLU", "GLY", "HIS", "ILE",
-        "LEU", "LYS", "MET", "PHE", "PRO",
-        "SER", "THR", "TRP", "TYR", "VAL",
-        "DA", "DC", "DT", "DG", "A", "C", "U", "G",
+        'ALA', 'ARG', 'ASN', 'ASP', 'CYS',
+        'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+        'LEU', 'LYS', 'MET', 'PHE', 'PRO',
+        'SER', 'THR', 'TRP', 'TYR', 'VAL',
+        'DA', 'DC', 'DT', 'DG', 'A', 'C', 'U', 'G',
     ])
 
     @staticmethod
@@ -635,16 +635,16 @@ class ModelParser:
             residue_id is missing.
         """
         _split = line.split()
-        atom_num = _split[fields["id"]]
-        atom_name = _split[fields["label_atom_id"]]
-        residue_name = _split[fields["label_comp_id"]]
-        chain_id = _split[fields["label_asym_id"]]
-        residue_id = _split[fields["label_seq_id"]]
-        x = _split[fields["Cartn_x"]]
-        y = _split[fields["Cartn_y"]]
-        z = _split[fields["Cartn_z"]]
+        atom_num = _split[fields['id']]
+        atom_name = _split[fields['label_atom_id']]
+        residue_name = _split[fields['label_comp_id']]
+        chain_id = _split[fields['label_asym_id']]
+        residue_id = _split[fields['label_seq_id']]
+        x = _split[fields['Cartn_x']]
+        y = _split[fields['Cartn_y']]
+        z = _split[fields['Cartn_z']]
 
-        if residue_id == ".":
+        if residue_id == '.':
             return None
 
         return ModelParser.package_line(
@@ -678,10 +678,10 @@ class ModelParser:
             Dictionary containing parsed atom/residue data.
         """
         return {
-            "atom_num": int(atom_num),
-            "atom_name": atom_name,
-            "coor": np.array([x, y, z], dtype=float),
-            "res": residue_name,
-            "chain_id": chain_id,
-            "resid": int(residue_id),
+            'atom_num': int(atom_num),
+            'atom_name': atom_name,
+            'coor': np.array([x, y, z], dtype=float),
+            'res': residue_name,
+            'chain_id': chain_id,
+            'resid': int(residue_id),
         }

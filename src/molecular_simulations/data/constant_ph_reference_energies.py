@@ -12,7 +12,7 @@ This ensures that at pH = pKa, both protonation states have equal probability.
 """
 
 
-def get_ref_energies(ff: str = "amber19"):
+def get_ref_energies(ff: str = 'amber19'):
     """
     Get reference energies for constant pH simulations.
 
@@ -28,20 +28,20 @@ def get_ref_energies(ff: str = "amber19"):
         Index 0 is the deprotonated state, index 1+ are protonated states.
     """
     match ff.lower():
-        case "amber19":
+        case 'amber19':
             # Reference energies based on experimental pKa values at 300K
             # pKa adjustment term = kT * ln(10) * pKa = 2.494 * 2.303 * pKa
             # ref = (E_prot - E_deprot)_GB + pKa adjustment
             # GB term accounts for implicit solvent contribution
             # This gives the correct equilibrium at each residue's pKa
             ref_energies = {
-                "CYS": [0.0, -275.17],  # pKa = 8.3
-                "ASP": [0.0, -107.17],  # pKa = 3.9
-                "GLU": [0.0, -96.32],  # pKa = 4.3
-                "LYS": [0.0, -26.72],  # pKa = 10.5
-                "HIS": [0.0, -60.43],  # pKa = 6.5 (2-state HID/HIP)
+                'CYS': [0.0, -275.17],  # pKa = 8.3
+                'ASP': [0.0, -107.17],  # pKa = 3.9
+                'GLU': [0.0, -96.32],  # pKa = 4.3
+                'LYS': [0.0, -26.72],  # pKa = 10.5
+                'HIS': [0.0, -60.43],  # pKa = 6.5 (2-state HID/HIP)
             }
         case _:
-            raise ValueError(f"Forcefield {ff} not yet computed!")
+            raise ValueError(f'Forcefield {ff} not yet computed!')
 
     return ref_energies

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# ruff: noqa: W293
 """AMBER system building module.
 
 This module provides classes for building molecular systems using AmberTools.
@@ -15,10 +15,9 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Union
 
-PathLike = Union[str, Path]
-OptPath = Union[str, Path, None]
+PathLike = str | Path
+OptPath = str | Path | None
 
 logger = logging.getLogger(__name__)
 
@@ -93,30 +92,30 @@ class ImplicitSolvent:
         if out is not None:
             self.out = self.path / out
         else:
-            self.out = self.path / "system.pdb"
+            self.out = self.path / 'system.pdb'
 
         self.out = self.out.resolve()
         self.delete = delete_temp_file
 
         if amberhome is None:
-            if "AMBERHOME" in os.environ:
-                amberhome = os.environ["AMBERHOME"]
+            if 'AMBERHOME' in os.environ:
+                amberhome = os.environ['AMBERHOME']
             else:
-                raise ValueError("AMBERHOME is not set in env vars!")
+                raise ValueError('AMBERHOME is not set in env vars!')
 
-        self.tleap = str(Path(amberhome) / "bin" / "tleap")
-        self.pdb4amber = str(Path(amberhome) / "bin" / "pdb4amber")
+        self.tleap = str(Path(amberhome) / 'bin' / 'tleap')
+        self.pdb4amber = str(Path(amberhome) / 'bin' / 'pdb4amber')
 
         switches = [protein, rna, dna, phos_protein, mod_protein]
         ffs = [
-            "leaprc.protein.ff19SB",
-            "leaprc.RNA.Shaw",
-            "leaprc.DNA.OL21",
-            "leaprc.phosaa19SB",
-            "leaprc.protein.ff14SB_modAA",
+            'leaprc.protein.ff19SB',
+            'leaprc.RNA.Shaw',
+            'leaprc.DNA.OL21',
+            'leaprc.phosaa19SB',
+            'leaprc.protein.ff14SB_modAA',
         ]
 
-        self.ffs = [ff for ff, switch in zip(ffs, switches) if switch]
+        self.ffs = [ff for ff, switch in zip(ffs, switches, strict=True) if switch]
 
         self.debug = debug
 
@@ -130,11 +129,11 @@ class ImplicitSolvent:
         files for the input structure.
         """
         logger.info(
-            "Build start: implicit solvent",
-            extra={"pdb": str(self.pdb), "out": str(self.out)},
+            'Build start: implicit solvent',
+            extra={'pdb': str(self.pdb), 'out': str(self.out)},
         )
         self.tleap_it()
-        logger.info("Build finished")
+        logger.info('Build finished')
 
     def tleap_it(self) -> None:
         """Run tleap to build the system.
@@ -143,7 +142,7 @@ class ImplicitSolvent:
         and any other enabled force fields. Sets mbondi3 radii for
         implicit solvent calculations.
         """
-        ffs = "\n".join([f"source {ff}" for ff in self.ffs])
+        ffs = '\n'.join([f'source {ff}' for ff in self.ffs])
         tleap_in = f"""
         {ffs}
         prot = loadpdb {self.pdb}
@@ -167,11 +166,11 @@ class ImplicitSolvent:
         Returns:
             Path to the written tleap input file.
         """
-        leap_file = f"{self.path}/tleap.in"
-        with open(leap_file, "w") as outfile:
+        leap_file = f'{self.path}/tleap.in'
+        with open(leap_file, 'w') as outfile:
             outfile.write(inp)
 
-        tleap_command = f"{self.tleap} -f {leap_file}"
+        tleap_command = f'{self.tleap} -f {leap_file}'
         subprocess.run(
             tleap_command,
             shell=True,
@@ -192,11 +191,11 @@ class ImplicitSolvent:
             inp: The tleap input file contents as a string.
         """
         with tempfile.NamedTemporaryFile(
-            mode="w+", suffix=".in", delete=self.delete, dir=str(self.path)
+            mode='w+', suffix='.in', delete=self.delete, dir=str(self.path)
         ) as temp_file:
             temp_file.write(inp)
             temp_file.flush()
-            tleap_command = f"{self.tleap} -f {temp_file.name}"
+            tleap_command = f'{self.tleap} -f {temp_file.name}'
             subprocess.run(
                 tleap_command,
                 shell=True,
@@ -271,13 +270,13 @@ class ExplicitSolvent(ImplicitSolvent):
             **kwargs,
         )
         self.pad = padding
-        self.ffs.extend(["leaprc.water.opc"])
-        self.water_box = "OPCBOX"
+        self.ffs.extend(['leaprc.water.opc'])
+        self.water_box = 'OPCBOX'
 
         if polarizable:
-            self.ffs[0] = "leaprc.protein.ff15ipq"
-            self.ffs[-1] = "leaprc.water.spceb"
-            self.water_box = "SPCBOX"
+            self.ffs[0] = 'leaprc.protein.ff15ipq'
+            self.ffs[-1] = 'leaprc.water.spceb'
+            self.water_box = 'SPCBOX'
 
     def build(self) -> None:
         """Orchestrate the explicit solvent system build.
@@ -287,15 +286,15 @@ class ExplicitSolvent(ImplicitSolvent):
         to assemble the final solvated system.
         """
         logger.info(
-            "Build started: explicit solvent",
-            extra={"pdb": str(self.pdb), "out": str(self.out)},
+            'Build started: explicit solvent',
+            extra={'pdb': str(self.pdb), 'out': str(self.out)},
         )
         self.prep_pdb()
         dim = self.get_pdb_extent()
         num_ions = self.get_ion_numbers(dim**3)
         self.assemble_system(dim, num_ions)
         self.clean_up_directory()
-        logger.info("Build finished")
+        logger.info('Build finished')
 
     def prep_pdb(self) -> None:
         """Prepare the input PDB using pdb4amber.
@@ -303,7 +302,7 @@ class ExplicitSolvent(ImplicitSolvent):
         Runs pdb4amber to ensure tleap compatibility. Removes explicit
         hydrogens from the input to avoid naming mismatches.
         """
-        cmd = f"{self.pdb4amber} -i {self.pdb} -o {self.path}/protein.pdb -y"
+        cmd = f'{self.pdb4amber} -i {self.pdb} -o {self.path}/protein.pdb -y'
         subprocess.run(
             cmd,
             shell=True,
@@ -313,7 +312,7 @@ class ExplicitSolvent(ImplicitSolvent):
             stderr=subprocess.DEVNULL,
         )
 
-        self.pdb = f"{self.path}/protein.pdb"
+        self.pdb = f'{self.path}/protein.pdb'
 
     def assemble_system(self, dim: float, num_ions: int) -> None:
         """Build the solvated system in tleap.
@@ -322,10 +321,10 @@ class ExplicitSolvent(ImplicitSolvent):
             dim: Box dimension (longest axis + padding) in Angstroms.
             num_ions: Number of Na+/Cl- ion pairs for 150mM concentration.
         """
-        tleap_ffs = "\n".join([f"source {ff}" for ff in self.ffs])
+        tleap_ffs = '\n'.join([f'source {ff}' for ff in self.ffs])
         out_pdb = self.out
-        out_top = self.out.with_suffix(".prmtop")
-        out_coor = self.out.with_suffix(".inpcrd")
+        out_top = self.out.with_suffix('.prmtop')
+        out_coor = self.out.with_suffix('.inpcrd')
 
         tleap_complex = f"""{tleap_ffs}
         PROT = loadpdb {self.pdb}
@@ -359,7 +358,12 @@ class ExplicitSolvent(ImplicitSolvent):
         Returns:
             Longest dimension plus twice the padding, in Angstroms.
         """
-        lines = [line for line in open(self.pdb).readlines() if "ATOM" in line]
+        lines = []
+        with open(self.pdb) as f:
+            for line in f.readlines():
+                if 'ATOM' in line:
+                    lines.append(line)
+
         xs, ys, zs = [], [], []
 
         for line in lines:
@@ -379,10 +383,10 @@ class ExplicitSolvent(ImplicitSolvent):
         Moves intermediate files to a 'build' subdirectory, keeping
         only the final .prmtop and .inpcrd files in the main directory.
         """
-        (self.path / "build").mkdir(exist_ok=True)
-        for f in self.path.glob("*"):
-            if not any([ext in f.name for ext in [".prmtop", ".inpcrd", "build"]]):
-                f.rename(f.parent / "build" / f.name)
+        (self.path / 'build').mkdir(exist_ok=True)
+        for f in self.path.glob('*'):
+            if not any([ext in f.name for ext in ['.prmtop', '.inpcrd', 'build']]):
+                f.rename(f.parent / 'build' / f.name)
 
     @staticmethod
     def get_ion_numbers(volume: float) -> int:

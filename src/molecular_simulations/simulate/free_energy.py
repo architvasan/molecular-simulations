@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Constants
 KB = 8.314462618e-3  # Boltzmann constant in kJ/(mol·K)
 
-_T = TypeVar("_T")
+_T = TypeVar('_T')
 
 
 @dataclass
@@ -188,10 +188,10 @@ class EVBAnalyzer:
         self.output_path = Path(output_path) if output_path else self.log_path
 
         if not self.log_path.exists():
-            raise FileNotFoundError(f"Log path does not exist: {self.log_path}")
+            raise FileNotFoundError(f'Log path does not exist: {self.log_path}')
 
     @classmethod
-    def from_metadata(cls, metadata_path: Path) -> "EVBAnalyzer":
+    def from_metadata(cls, metadata_path: Path) -> 'EVBAnalyzer':
         """Create analyzer from a metadata TOML file.
 
         The metadata file should contain the parameters used during simulation.
@@ -211,21 +211,21 @@ class EVBAnalyzer:
             rc0_values = [-0.2, -0.19, ..., 0.2]
         """
         metadata_path = Path(metadata_path)
-        with open(metadata_path, "rb") as f:
+        with open(metadata_path, 'rb') as f:
             config = tomllib.load(f)
 
-        evb_config = config.get("evb", config)  # Support nested or flat structure
+        evb_config = config.get('evb', config)  # Support nested or flat structure
 
         return cls(
-            log_path=Path(evb_config["log_path"]),
-            log_prefix=evb_config["log_prefix"],
-            k_umbrella=evb_config["k_umbrella"],
-            rc0_values=np.array(evb_config["rc0_values"]),
-            output_path=evb_config.get("output_path"),
+            log_path=Path(evb_config['log_path']),
+            log_prefix=evb_config['log_prefix'],
+            k_umbrella=evb_config['k_umbrella'],
+            rc0_values=np.array(evb_config['rc0_values']),
+            output_path=evb_config.get('output_path'),
         )
 
     @classmethod
-    def from_evb_instance(cls, evb: "EVB") -> "EVBAnalyzer":
+    def from_evb_instance(cls, evb: 'EVB') -> 'EVBAnalyzer':
         """Create analyzer from an existing EVB instance.
 
         Useful when you want to decouple analysis from the simulation object.
@@ -253,19 +253,19 @@ class EVBAnalyzer:
         Returns:
             Path to saved metadata file.
         """
-        output_path = output_path or (self.log_path / "evb_metadata.toml")
+        output_path = output_path or (self.log_path / 'evb_metadata.toml')
 
         # tomllib is read-only, so write manually
-        with open(output_path, "w") as f:
-            f.write("[evb]\n")
+        with open(output_path, 'w') as f:
+            f.write('[evb]\n')
             f.write(f'log_path = "{self.log_path}"\n')
             f.write(f'log_prefix = "{self.log_prefix}"\n')
-            f.write(f"k_umbrella = {self.k}\n")
-            f.write(f"rc0_values = {self.reaction_coordinate.tolist()}\n")
+            f.write(f'k_umbrella = {self.k}\n')
+            f.write(f'rc0_values = {self.reaction_coordinate.tolist()}\n')
             if self.output_path != self.log_path:
                 f.write(f'output_path = "{self.output_path}"\n')
 
-        logger.info(f"Saved metadata to {output_path}")
+        logger.info(f'Saved metadata to {output_path}')
         return output_path
 
     def load_rc_data(self) -> list[np.ndarray]:
@@ -281,20 +281,20 @@ class EVBAnalyzer:
         n_windows = len(self.reaction_coordinate)
 
         for i in range(n_windows):
-            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
+            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
             if not rc_log.exists():
                 raise FileNotFoundError(
-                    f"RC log file not found: {rc_log}. "
-                    f"Expected {n_windows} windows based on rc0_values."
+                    f'RC log file not found: {rc_log}. '
+                    f'Expected {n_windows} windows based on rc0_values.'
                 )
             rc_contents = (
-                pl.read_csv(str(rc_log)).select(pl.col("rc")).to_numpy().flatten()
+                pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy().flatten()
             )
             rc_data.append(rc_contents)
-            logger.debug(f"Loaded window {i}: {len(rc_contents)} frames")
+            logger.debug(f'Loaded window {i}: {len(rc_contents)} frames')
 
         logger.info(
-            f"Loaded {n_windows} windows with {sum(len(rc) for rc in rc_data)} total frames"
+            f'Loaded {n_windows} windows with {sum(len(rc) for rc in rc_data)} total frames'
         )
         return rc_data
 
@@ -308,7 +308,7 @@ class EVBAnalyzer:
         """
         available = []
         for i in range(len(self.reaction_coordinate)):
-            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
+            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
             if rc_log.exists():
                 available.append(i)
         return available
@@ -329,20 +329,20 @@ class EVBAnalyzer:
 
         frames_per_window = {}
         for i in available:
-            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
+            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
             try:
                 n_frames = len(pl.read_csv(str(rc_log)))
                 frames_per_window[i] = n_frames
             except Exception as e:
-                frames_per_window[i] = f"Error: {e}"
+                frames_per_window[i] = f'Error: {e}'
 
         return {
-            "n_expected": n_expected,
-            "n_complete": len(available),
-            "complete_fraction": len(available) / n_expected if n_expected > 0 else 0,
-            "missing_windows": missing,
-            "frames_per_window": frames_per_window,
-            "total_frames": sum(
+            'n_expected': n_expected,
+            'n_complete': len(available),
+            'complete_fraction': len(available) / n_expected if n_expected > 0 else 0,
+            'missing_windows': missing,
+            'frames_per_window': frames_per_window,
+            'total_frames': sum(
                 v for v in frames_per_window.values() if isinstance(v, int)
             ),
         }
@@ -365,7 +365,7 @@ class EVBAnalyzer:
         if variance < 1e-10:
             return 0, 1.0, float(n)
 
-        autocorr = np.correlate(data_normalized, data_normalized, mode="full")
+        autocorr = np.correlate(data_normalized, data_normalized, mode='full')
         autocorr = autocorr[n - 1 :] / (variance * n)
 
         g = 1.0
@@ -388,7 +388,7 @@ class EVBAnalyzer:
             if var_subset < 1e-10:
                 continue
 
-            autocorr_subset = np.correlate(subset_norm, subset_norm, mode="full")
+            autocorr_subset = np.correlate(subset_norm, subset_norm, mode='full')
             autocorr_subset = autocorr_subset[len(subset) - 1 :] / (
                 var_subset * len(subset)
             )
@@ -438,7 +438,7 @@ class EVBAnalyzer:
             )
 
             if t0 > len(rc) * 0.5:
-                logger.warning(f"Window {i}: >50% discarded as equilibration")
+                logger.warning(f'Window {i}: >50% discarded as equilibration')
 
         return results
 
@@ -513,7 +513,7 @@ class EVBAnalyzer:
     ) -> PMFResult:
         """Compute PMF using MBAR (preferred) or WHAM fallback."""
         if not rc_data:
-            raise ValueError("No RC data provided")
+            raise ValueError('No RC data provided')
 
         n_windows = len(rc_data)
         rc0_values = self.reaction_coordinate[:n_windows]
@@ -521,7 +521,7 @@ class EVBAnalyzer:
         if find_spec('pymbar') is not None:
             return self._compute_pmf_mbar(rc_data, rc0_values, temperature, n_bins)
         else:
-            logger.warning("pymbar not available, using WHAM fallback")
+            logger.warning('pymbar not available, using WHAM fallback')
             return self._compute_pmf_histogram(rc_data, rc0_values, temperature, n_bins)
 
     def _compute_pmf_mbar(
@@ -544,12 +544,12 @@ class EVBAnalyzer:
         for k in range(n_windows):
             u_kn[k, :] = beta * 0.5 * self.k * (rc_all - rc0_values[k]) ** 2
 
-        logger.info("Running MBAR analysis...")
+        logger.info('Running MBAR analysis...')
         mbar = pymbar.MBAR(u_kn, N_k, verbose=False)
 
         results = mbar.compute_free_energy_differences()
-        free_energies = results["Delta_f"][0, :]
-        free_energy_uncertainty = results["dDelta_f"][0, :]
+        free_energies = results['Delta_f'][0, :]
+        free_energy_uncertainty = results['dDelta_f'][0, :]
 
         rc_min, rc_max = rc_all.min(), rc_all.max()
         bin_edges = np.linspace(rc_min, rc_max, n_bins + 1)
@@ -665,7 +665,7 @@ class EVBAnalyzer:
         Returns:
             EVBAnalysisResult with complete analysis.
         """
-        logger.info("Starting EVB analysis...")
+        logger.info('Starting EVB analysis...')
 
         # Load data
         rc_data_raw = self.load_rc_data()
@@ -676,20 +676,20 @@ class EVBAnalyzer:
             rc_data = [rc[eq.t0 :] for rc, eq in zip(rc_data_raw, equilibration, strict=True)]
             n_discarded = sum(eq.t0 for eq in equilibration)
             n_total = sum(len(rc) for rc in rc_data_raw)
-            logger.info(f"Discarded {n_discarded}/{n_total} frames as equilibration")
+            logger.info(f'Discarded {n_discarded}/{n_total} frames as equilibration')
         else:
             rc_data = rc_data_raw
 
         # Convergence
         convergence = self.check_convergence(rc_data, block_size, sem_threshold)
         n_converged = sum(1 for c in convergence if c.is_converged)
-        logger.info(f"Converged windows: {n_converged}/{len(convergence)}")
+        logger.info(f'Converged windows: {n_converged}/{len(convergence)}')
 
         # Overlap
         overlap = self.analyze_overlap(rc_data, n_bins, overlap_threshold)
         if overlap.problem_pairs:
             logger.warning(
-                f"Found {len(overlap.problem_pairs)} pairs with insufficient overlap"
+                f'Found {len(overlap.problem_pairs)} pairs with insufficient overlap'
             )
 
         # PMF
@@ -698,7 +698,7 @@ class EVBAnalyzer:
         if len(valid_pmf) > 0:
             barrier = valid_pmf.max()
             logger.info(
-                f"Barrier: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)"
+                f'Barrier: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)'
             )
 
         return EVBAnalysisResult(
@@ -721,57 +721,57 @@ class EVBAnalyzer:
         # PMF
         pmf_df = pl.DataFrame(
             {
-                "RC": result.pmf.bin_centers,
-                "PMF_kJ_mol": result.pmf.pmf,
-                "uncertainty_kJ_mol": result.pmf.pmf_uncertainty,
+                'RC': result.pmf.bin_centers,
+                'PMF_kJ_mol': result.pmf.pmf,
+                'uncertainty_kJ_mol': result.pmf.pmf_uncertainty,
             }
         )
-        pmf_df.write_csv(str(output_dir / f"{self.log_prefix}_pmf.csv"))
+        pmf_df.write_csv(str(output_dir / f'{self.log_prefix}_pmf.csv'))
 
         # Window free energies
         fe_df = pl.DataFrame(
             {
-                "window": list(range(len(result.pmf.free_energies))),
-                "rc0": self.reaction_coordinate[
+                'window': list(range(len(result.pmf.free_energies))),
+                'rc0': self.reaction_coordinate[
                     : len(result.pmf.free_energies)
                 ].tolist(),
-                "free_energy_kJ_mol": result.pmf.free_energies,
-                "uncertainty_kJ_mol": result.pmf.free_energy_uncertainty,
+                'free_energy_kJ_mol': result.pmf.free_energies,
+                'uncertainty_kJ_mol': result.pmf.free_energy_uncertainty,
             }
         )
-        fe_df.write_csv(str(output_dir / f"{self.log_prefix}_window_free_energies.csv"))
+        fe_df.write_csv(str(output_dir / f'{self.log_prefix}_window_free_energies.csv'))
 
         # Convergence
         conv_df = pl.DataFrame(
             {
-                "window": [c.window_idx for c in result.convergence],
-                "mean_rc": [c.mean_rc for c in result.convergence],
-                "sem": [c.sem for c in result.convergence],
-                "is_converged": [c.is_converged for c in result.convergence],
+                'window': [c.window_idx for c in result.convergence],
+                'mean_rc': [c.mean_rc for c in result.convergence],
+                'sem': [c.sem for c in result.convergence],
+                'is_converged': [c.is_converged for c in result.convergence],
             }
         )
-        conv_df.write_csv(str(output_dir / f"{self.log_prefix}_convergence.csv"))
+        conv_df.write_csv(str(output_dir / f'{self.log_prefix}_convergence.csv'))
 
         # Summary
-        summary_path = output_dir / f"{self.log_prefix}_analysis_summary.txt"
-        with open(summary_path, "w") as f:
-            f.write("EVB Free Energy Analysis Summary\n")
-            f.write("=" * 50 + "\n\n")
-            f.write(f"Temperature: {result.temperature} K\n")
-            f.write(f"Umbrella force constant: {result.k_umbrella} kJ/mol/nm²\n")
-            f.write(f"Number of windows: {len(result.rc_data)}\n\n")
+        summary_path = output_dir / f'{self.log_prefix}_analysis_summary.txt'
+        with open(summary_path, 'w') as f:
+            f.write('EVB Free Energy Analysis Summary\n')
+            f.write('=' * 50 + '\n\n')
+            f.write(f'Temperature: {result.temperature} K\n')
+            f.write(f'Umbrella force constant: {result.k_umbrella} kJ/mol/nm²\n')
+            f.write(f'Number of windows: {len(result.rc_data)}\n\n')
 
             valid_pmf = result.pmf.pmf[~np.isnan(result.pmf.pmf)]
             if len(valid_pmf) > 0:
-                f.write(f"Barrier height: {valid_pmf.max():.2f} kJ/mol\n")
-                f.write(f"              = {valid_pmf.max() / 4.184:.2f} kcal/mol\n\n")
+                f.write(f'Barrier height: {valid_pmf.max():.2f} kJ/mol\n')
+                f.write(f'              = {valid_pmf.max() / 4.184:.2f} kcal/mol\n\n')
 
             f.write(
-                f"Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} converged\n"
+                f'Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} converged\n'
             )
-            f.write(f"Minimum overlap: {result.overlap.min_overlap:.3f}\n")
+            f.write(f'Minimum overlap: {result.overlap.min_overlap:.3f}\n')
 
-        logger.info(f"Results saved to {output_dir}")
+        logger.info(f'Results saved to {output_dir}')
 
 
 @python_app
@@ -819,7 +819,7 @@ class EVB:
         reactive_atom: str,
         parsl_config: Config,
         log_path: Path,
-        log_prefix: str = "reactant",
+        log_prefix: str = 'reactant',
         rc_write_freq: int = 5,
         steps: int = 500000,
         dt: float = 0.002,
@@ -828,7 +828,7 @@ class EVB:
         D_e: float = 392.46,  # Morse well depth (kJ/mol) - from BDE
         alpha: float = 13.275,  # Morse width parameter (nm^-1) - computed from sqrt(k_bond/(2*D_e))
         r0: float = 0.109,  # Equilibrium bond distance (nm)
-        platform: str = "CUDA",
+        platform: str = 'CUDA',
         n_windows: int = 50,
         reaction_coordinate: list[float] | None = None,
         restraint_sel: str | None = None,
@@ -860,7 +860,7 @@ class EVB:
         """
         self.topology = Path(topology)
         self.coordinates = Path(coordinates)
-        self.path = self.topology.parent / "evb"
+        self.path = self.topology.parent / 'evb'
 
         self.parsl_config = parsl_config
         self.dfk = None
@@ -937,12 +937,12 @@ class EVB:
                 existing_dfk = parsl.dfk()
                 self.dfk = existing_dfk
                 self._owns_parsl = False
-                logger.info("Reusing existing Parsl DataFlowKernel")
+                logger.info('Reusing existing Parsl DataFlowKernel')
             except Exception:
                 # No DFK exists, load a new one
                 self.dfk = parsl.load(self.parsl_config)
                 self._owns_parsl = True
-                logger.info("Initialized new Parsl DataFlowKernel")
+                logger.info('Initialized new Parsl DataFlowKernel')
 
     def shutdown(self) -> None:
         """Clean up Parsl after runs.
@@ -953,7 +953,7 @@ class EVB:
         if self._owns_parsl and self.dfk:
             self.dfk.cleanup()
             parsl.clear()
-            logger.info("Shut down Parsl DataFlowKernel")
+            logger.info('Shut down Parsl DataFlowKernel')
         self.dfk = None
         self._owns_parsl = False
 
@@ -964,14 +964,14 @@ class EVB:
 
         futures = []
         for i, rc0 in enumerate(self.reaction_coordinate):
-            umbrella = {**self.umbrella, "rc0": rc0}
+            umbrella = {**self.umbrella, 'rc0': rc0}
 
             futures.append(
                 parsl_func(
                     topology=self.topology,
                     coord_file=self.coordinates,
-                    out_path=self.path / f"window{i}",
-                    rc_file=self.log_path / f"{self.log_prefix}_{i}.log",
+                    out_path=self.path / f'window{i}',
+                    rc_file=self.log_path / f'{self.log_prefix}_{i}.log',
                     umbrella_force=umbrella,
                     morse_bond=self.morse_bond,
                     rc_freq=self.rc_freq,
@@ -987,7 +987,7 @@ class EVB:
                 future.result()
             except Exception as e:
                 tb = traceback.format_exc()
-                print(f"EVB failed for 1 or more windows!{e}{tb}")
+                print(f'EVB failed for 1 or more windows!{e}{tb}')
 
         if self._owns_parsl:
             self.shutdown()
@@ -1006,27 +1006,27 @@ class EVB:
             ValueError: If no EVB windows are found.
             FileNotFoundError: If RC log files are missing.
         """
-        windows = natsorted(list(self.path.glob("window*")))
+        windows = natsorted(list(self.path.glob('window*')))
         if not windows:
-            raise ValueError(f"No EVB windows found in {self.path}")
+            raise ValueError(f'No EVB windows found in {self.path}')
 
         all_data = []
 
         for i in range(len(windows)):
-            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
+            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
             if not rc_log.exists():
-                raise FileNotFoundError(f"RC log file not found: {rc_log}")
+                raise FileNotFoundError(f'RC log file not found: {rc_log}')
 
             rc_contents = (
-                pl.read_csv(str(rc_log)).select(pl.col("rc")).to_numpy().flatten()
+                pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy().flatten()
             )
             n_frames = len(rc_contents)
 
             window_df = pl.DataFrame(
                 {
-                    "window": np.full(n_frames, i, dtype=np.int32),
-                    "RC": rc_contents,
-                    "rc0": np.full(
+                    'window': np.full(n_frames, i, dtype=np.int32),
+                    'RC': rc_contents,
+                    'rc0': np.full(
                         n_frames, self.reaction_coordinate[i], dtype=np.float64
                     ),
                 }
@@ -1034,13 +1034,13 @@ class EVB:
             all_data.append(window_df)
 
             logger.info(
-                f"Loaded window {i}: {n_frames} frames, target RC = {self.reaction_coordinate[i]:.4f}"
+                f'Loaded window {i}: {n_frames} frames, target RC = {self.reaction_coordinate[i]:.4f}'
             )
 
         df = pl.concat(all_data)
-        output_path = self.log_path / f"{self.log_prefix}_rc_data.parquet"
+        output_path = self.log_path / f'{self.log_prefix}_rc_data.parquet'
         df.write_parquet(str(output_path))
-        logger.info(f"Saved RC data to {output_path}")
+        logger.info(f'Saved RC data to {output_path}')
 
         return df
 
@@ -1054,24 +1054,24 @@ class EVB:
             ValueError: If no windows found.
             FileNotFoundError: If log files missing.
         """
-        windows = natsorted(list(self.path.glob("window*")))
+        windows = natsorted(list(self.path.glob('window*')))
         if not windows:
-            raise ValueError(f"No EVB windows found in {self.path}")
+            raise ValueError(f'No EVB windows found in {self.path}')
 
         rc_data = []
         for i in range(len(windows)):
-            rc_log = self.log_path / f"{self.log_prefix}_{i}.log"
+            rc_log = self.log_path / f'{self.log_prefix}_{i}.log'
             if not rc_log.exists():
-                raise FileNotFoundError(f"RC log file not found: {rc_log}")
+                raise FileNotFoundError(f'RC log file not found: {rc_log}')
             rc_contents = (
-                pl.read_csv(str(rc_log)).select(pl.col("rc")).to_numpy().flatten()
+                pl.read_csv(str(rc_log)).select(pl.col('rc')).to_numpy().flatten()
             )
             rc_data.append(rc_contents)
 
         return rc_data
 
     def detect_equilibration(
-        self, rc_data: list[np.ndarray], method: str = "statistical_inefficiency"
+        self, rc_data: list[np.ndarray], method: str = 'statistical_inefficiency'
     ) -> list[EquilibrationResult]:
         """Detect equilibration time for each window.
 
@@ -1116,8 +1116,8 @@ class EVB:
 
             if t0 > len(rc) * 0.5:
                 logger.warning(
-                    f"Window {i}: >50% of trajectory discarded as equilibration "
-                    f"(t0={t0}, n_total={len(rc)})"
+                    f'Window {i}: >50% of trajectory discarded as equilibration '
+                    f'(t0={t0}, n_total={len(rc)})'
                 )
 
         return results
@@ -1153,7 +1153,7 @@ class EVB:
             return 0, 1.0, float(n)
 
         # Compute autocorrelation
-        autocorr = np.correlate(data_normalized, data_normalized, mode="full")
+        autocorr = np.correlate(data_normalized, data_normalized, mode='full')
         autocorr = autocorr[n - 1 :] / (variance * n)
 
         # Compute statistical inefficiency g = 1 + 2 * sum(C(t))
@@ -1181,7 +1181,7 @@ class EVB:
             if var_subset < 1e-10:
                 continue
 
-            autocorr_subset = np.correlate(subset_norm, subset_norm, mode="full")
+            autocorr_subset = np.correlate(subset_norm, subset_norm, mode='full')
             autocorr_subset = autocorr_subset[len(subset) - 1 :] / (
                 var_subset * len(subset)
             )
@@ -1231,8 +1231,8 @@ class EVB:
 
             if n_blocks < 3:
                 logger.warning(
-                    f"Window {i}: Only {n_blocks} blocks available. "
-                    "Consider longer simulation or smaller block_size."
+                    f'Window {i}: Only {n_blocks} blocks available. '
+                    'Consider longer simulation or smaller block_size.'
                 )
                 n_blocks = max(3, n_blocks)
                 bs = n // n_blocks
@@ -1259,8 +1259,8 @@ class EVB:
 
             if not is_converged:
                 logger.warning(
-                    f"Window {i}: SEM ({sem:.4f}) exceeds threshold ({sem_threshold}). "
-                    "Consider longer sampling."
+                    f'Window {i}: SEM ({sem:.4f}) exceeds threshold ({sem_threshold}). '
+                    'Consider longer sampling.'
                 )
 
         return results
@@ -1307,9 +1307,9 @@ class EVB:
             if overlap < min_overlap_threshold:
                 problem_pairs.append((i, i + 1))
                 logger.warning(
-                    f"Windows {i} and {i + 1}: overlap ({overlap:.3f}) "
-                    f"below threshold ({min_overlap_threshold}). "
-                    "Consider adding intermediate windows."
+                    f'Windows {i} and {i + 1}: overlap ({overlap:.3f}) '
+                    f'below threshold ({min_overlap_threshold}). '
+                    'Consider adding intermediate windows.'
                 )
 
         min_overlap = overlap_matrix.min() if len(overlap_matrix) > 0 else 0.0
@@ -1341,7 +1341,7 @@ class EVB:
             ValueError: If rc_data is empty or windows have no samples.
         """
         if not rc_data:
-            raise ValueError("No RC data provided")
+            raise ValueError('No RC data provided')
 
         n_windows = len(rc_data)
         rc0_values = self.reaction_coordinate[:n_windows]
@@ -1350,8 +1350,8 @@ class EVB:
             return self._compute_pmf_mbar(rc_data, rc0_values, temperature, n_bins)
         else:
             logger.warning(
-                "pymbar not available. Using simplified histogram reweighting. "
-                "Install pymbar for more accurate results: pip install pymbar"
+                'pymbar not available. Using simplified histogram reweighting. '
+                'Install pymbar for more accurate results: pip install pymbar'
             )
             return self._compute_pmf_histogram(rc_data, rc0_values, temperature, n_bins)
 
@@ -1392,13 +1392,13 @@ class EVB:
             u_kn[k, :] = beta * 0.5 * k_umb * (rc_all - rc0_values[k]) ** 2
 
         # Initialize MBAR
-        logger.info("Running MBAR analysis...")
+        logger.info('Running MBAR analysis...')
         mbar = pymbar.MBAR(u_kn, N_k, verbose=False)
 
         # Get free energies for each window
         results = mbar.compute_free_energy_differences()
-        free_energies = results["Delta_f"][0, :]  # Relative to first window
-        free_energy_uncertainty = results["dDelta_f"][0, :]
+        free_energies = results['Delta_f'][0, :]  # Relative to first window
+        free_energy_uncertainty = results['dDelta_f'][0, :]
 
         # Compute PMF on a grid using histogram reweighting
         rc_min, rc_max = rc_all.min(), rc_all.max()
@@ -1437,7 +1437,7 @@ class EVB:
                     pmf_uncertainty[i] = np.nan
 
             except Exception as e:
-                logger.warning(f"Error computing PMF for bin {i}: {e}")
+                logger.warning(f'Error computing PMF for bin {i}: {e}')
                 pmf[i] = np.nan
                 pmf_uncertainty[i] = np.nan
 
@@ -1529,10 +1529,10 @@ class EVB:
             f_k -= f_k[0]  # Reference to first window
             delta = np.max(np.abs(f_k - f_k_old))
             if delta < tolerance:
-                logger.info(f"WHAM converged after {iteration + 1} iterations")
+                logger.info(f'WHAM converged after {iteration + 1} iterations')
                 break
         else:
-            logger.warning(f"WHAM did not converge after {max_iter} iterations")
+            logger.warning(f'WHAM did not converge after {max_iter} iterations')
 
         # Compute PMF from probability
         pmf = np.full(n_bins, np.nan)
@@ -1587,14 +1587,14 @@ class EVB:
             >>> result = evb.run_full_analysis(temperature=300.0)
             >>> print(f"Barrier height: {result.pmf.pmf.max():.2f} kJ/mol")
         """
-        logger.info("Starting comprehensive EVB analysis...")
+        logger.info('Starting comprehensive EVB analysis...')
 
         # Load RC data
-        logger.info("Loading reaction coordinate data...")
+        logger.info('Loading reaction coordinate data...')
         rc_data_raw = self.load_rc_data()
 
         # Detect equilibration
-        logger.info("Detecting equilibration...")
+        logger.info('Detecting equilibration...')
         equilibration = self.detect_equilibration(rc_data_raw)
 
         # Remove equilibration frames if requested
@@ -1603,28 +1603,28 @@ class EVB:
             n_discarded = sum(eq.t0 for eq in equilibration)
             n_total = sum(len(rc) for rc in rc_data_raw)
             logger.info(
-                f"Discarded {n_discarded}/{n_total} frames "
-                f"({100 * n_discarded / n_total:.1f}%) as equilibration"
+                f'Discarded {n_discarded}/{n_total} frames '
+                f'({100 * n_discarded / n_total:.1f}%) as equilibration'
             )
         else:
             rc_data = rc_data_raw
 
         # Check convergence
-        logger.info("Checking convergence...")
+        logger.info('Checking convergence...')
         convergence = self.check_convergence(rc_data, block_size, sem_threshold)
         n_converged = sum(1 for c in convergence if c.is_converged)
-        logger.info(f"Converged windows: {n_converged}/{len(convergence)}")
+        logger.info(f'Converged windows: {n_converged}/{len(convergence)}')
 
         # Analyze overlap
-        logger.info("Analyzing window overlap...")
+        logger.info('Analyzing window overlap...')
         overlap = self.analyze_overlap(rc_data, n_bins, overlap_threshold)
         if overlap.problem_pairs:
             logger.warning(
-                f"Found {len(overlap.problem_pairs)} window pairs with insufficient overlap"
+                f'Found {len(overlap.problem_pairs)} window pairs with insufficient overlap'
             )
 
         # Compute PMF
-        logger.info("Computing PMF...")
+        logger.info('Computing PMF...')
         pmf = self.compute_pmf(rc_data, temperature, n_bins)
 
         # Report key results
@@ -1632,7 +1632,7 @@ class EVB:
         if len(valid_pmf) > 0:
             barrier = valid_pmf.max()
             logger.info(
-                f"Estimated barrier height: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)"
+                f'Estimated barrier height: {barrier:.2f} kJ/mol ({barrier / 4.184:.2f} kcal/mol)'
             )
 
         return EVBAnalysisResult(
@@ -1666,64 +1666,64 @@ class EVB:
         # Save PMF
         pmf_df = pl.DataFrame(
             {
-                "RC": result.pmf.bin_centers,
-                "PMF_kJ_mol": result.pmf.pmf,
-                "uncertainty_kJ_mol": result.pmf.pmf_uncertainty,
+                'RC': result.pmf.bin_centers,
+                'PMF_kJ_mol': result.pmf.pmf,
+                'uncertainty_kJ_mol': result.pmf.pmf_uncertainty,
             }
         )
-        pmf_df.write_csv(str(output_dir / f"{self.log_prefix}_pmf.csv"))
+        pmf_df.write_csv(str(output_dir / f'{self.log_prefix}_pmf.csv'))
 
         # Save window free energies
         fe_df = pl.DataFrame(
             {
-                "window": list(range(len(result.pmf.free_energies))),
-                "rc0": self.reaction_coordinate[: len(result.pmf.free_energies)],
-                "free_energy_kJ_mol": result.pmf.free_energies,
-                "uncertainty_kJ_mol": result.pmf.free_energy_uncertainty,
+                'window': list(range(len(result.pmf.free_energies))),
+                'rc0': self.reaction_coordinate[: len(result.pmf.free_energies)],
+                'free_energy_kJ_mol': result.pmf.free_energies,
+                'uncertainty_kJ_mol': result.pmf.free_energy_uncertainty,
             }
         )
-        fe_df.write_csv(str(output_dir / f"{self.log_prefix}_window_free_energies.csv"))
+        fe_df.write_csv(str(output_dir / f'{self.log_prefix}_window_free_energies.csv'))
 
         # Save convergence data
         conv_df = pl.DataFrame(
             {
-                "window": [c.window_idx for c in result.convergence],
-                "mean_rc": [c.mean_rc for c in result.convergence],
-                "sem": [c.sem for c in result.convergence],
-                "is_converged": [c.is_converged for c in result.convergence],
+                'window': [c.window_idx for c in result.convergence],
+                'mean_rc': [c.mean_rc for c in result.convergence],
+                'sem': [c.sem for c in result.convergence],
+                'is_converged': [c.is_converged for c in result.convergence],
             }
         )
-        conv_df.write_csv(str(output_dir / f"{self.log_prefix}_convergence.csv"))
+        conv_df.write_csv(str(output_dir / f'{self.log_prefix}_convergence.csv'))
 
         # Save summary
-        summary_path = output_dir / f"{self.log_prefix}_analysis_summary.txt"
-        with open(summary_path, "w") as f:
-            f.write("EVB Free Energy Analysis Summary\n")
-            f.write("=" * 50 + "\n\n")
+        summary_path = output_dir / f'{self.log_prefix}_analysis_summary.txt'
+        with open(summary_path, 'w') as f:
+            f.write('EVB Free Energy Analysis Summary\n')
+            f.write('=' * 50 + '\n\n')
 
-            f.write(f"Temperature: {result.temperature} K\n")
-            f.write(f"Umbrella force constant: {result.k_umbrella} kJ/mol/nm²\n")
-            f.write(f"Number of windows: {len(result.rc_data)}\n\n")
+            f.write(f'Temperature: {result.temperature} K\n')
+            f.write(f'Umbrella force constant: {result.k_umbrella} kJ/mol/nm²\n')
+            f.write(f'Number of windows: {len(result.rc_data)}\n\n')
 
             valid_pmf = result.pmf.pmf[~np.isnan(result.pmf.pmf)]
             if len(valid_pmf) > 0:
-                f.write(f"Barrier height: {valid_pmf.max():.2f} kJ/mol\n")
-                f.write(f"              = {valid_pmf.max() / 4.184:.2f} kcal/mol\n\n")
+                f.write(f'Barrier height: {valid_pmf.max():.2f} kJ/mol\n')
+                f.write(f'              = {valid_pmf.max() / 4.184:.2f} kcal/mol\n\n')
 
             f.write(
-                f"Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} windows converged\n"
+                f'Convergence: {sum(1 for c in result.convergence if c.is_converged)}/{len(result.convergence)} windows converged\n'
             )
-            f.write(f"Minimum overlap: {result.overlap.min_overlap:.3f}\n")
+            f.write(f'Minimum overlap: {result.overlap.min_overlap:.3f}\n')
             if result.overlap.problem_pairs:
-                f.write(f"Problem pairs: {result.overlap.problem_pairs}\n")
+                f.write(f'Problem pairs: {result.overlap.problem_pairs}\n')
 
-            f.write("\nEquilibration:\n")
+            f.write('\nEquilibration:\n')
             for eq in result.equilibration:
                 f.write(
-                    f"  Window {eq.window_idx}: t0={eq.t0}, g={eq.g:.2f}, N_eff={eq.n_effective:.1f}\n"
+                    f'  Window {eq.window_idx}: t0={eq.t0}, g={eq.g:.2f}, N_eff={eq.n_effective:.1f}\n'
                 )
 
-        logger.info(f"Analysis results saved to {output_dir}")
+        logger.info(f'Analysis results saved to {output_dir}')
 
     def save_metadata(self, output_path: Path | None = None) -> Path:
         """Save run metadata for later analysis without re-instantiation.
@@ -1748,35 +1748,35 @@ class EVB:
             >>> result = analyzer.run_full_analysis()
         """
         output_path = (
-            Path(output_path) if output_path else (self.log_path / "evb_metadata.toml")
+            Path(output_path) if output_path else (self.log_path / 'evb_metadata.toml')
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, "w") as f:
-            f.write("# EVB run metadata - use with EVBAnalyzer.from_metadata()\n")
-            f.write("# Generated from EVB instance\n\n")
-            f.write("[evb]\n")
+        with open(output_path, 'w') as f:
+            f.write('# EVB run metadata - use with EVBAnalyzer.from_metadata()\n')
+            f.write('# Generated from EVB instance\n\n')
+            f.write('[evb]\n')
             f.write(f'log_path = "{self.log_path}"\n')
             f.write(f'log_prefix = "{self.log_prefix}"\n')
-            f.write(f"k_umbrella = {self.k}\n")
-            f.write(f"rc0_values = {self.reaction_coordinate.tolist()}\n")
-            f.write("\n# Additional simulation parameters (for reference)\n")
-            f.write("[simulation]\n")
-            f.write(f"n_windows = {self.n_windows}\n")
-            f.write(f"steps = {self.steps}\n")
-            f.write(f"dt = {self.dt}\n")
-            f.write(f"k_path = {self.k_path}\n")
-            f.write(f"D_e = {self.D_e}\n")
-            f.write(f"alpha = {self.alpha}\n")
-            f.write(f"r0 = {self.r0}\n")
+            f.write(f'k_umbrella = {self.k}\n')
+            f.write(f'rc0_values = {self.reaction_coordinate.tolist()}\n')
+            f.write('\n# Additional simulation parameters (for reference)\n')
+            f.write('[simulation]\n')
+            f.write(f'n_windows = {self.n_windows}\n')
+            f.write(f'steps = {self.steps}\n')
+            f.write(f'dt = {self.dt}\n')
+            f.write(f'k_path = {self.k_path}\n')
+            f.write(f'D_e = {self.D_e}\n')
+            f.write(f'alpha = {self.alpha}\n')
+            f.write(f'r0 = {self.r0}\n')
             f.write(f'platform = "{self.platform}"\n')
             f.write(f'topology = "{self.topology}"\n')
             f.write(f'coordinates = "{self.coordinates}"\n')
 
-        logger.info(f"Saved EVB metadata to {output_path}")
+        logger.info(f'Saved EVB metadata to {output_path}')
         return output_path
 
-    def get_analyzer(self) -> "EVBAnalyzer":
+    def get_analyzer(self) -> 'EVBAnalyzer':
         """Create an EVBAnalyzer from this EVB instance.
 
         Useful when you want to run analysis separately from simulation,
@@ -1805,12 +1805,12 @@ class EVB:
             dict: Umbrella and path restraint parameters.
         """
         return {
-            "atom_i": self.umbrella_atoms[0],
-            "atom_j": self.umbrella_atoms[1],
-            "atom_k": self.umbrella_atoms[2],
-            "k": self.k,
-            "k_path": self.k_path,
-            "rc0": None,
+            'atom_i': self.umbrella_atoms[0],
+            'atom_j': self.umbrella_atoms[1],
+            'atom_k': self.umbrella_atoms[2],
+            'k': self.k,
+            'k_path': self.k_path,
+            'rc0': None,
         }
 
     @property
@@ -1839,11 +1839,11 @@ class EVB:
             dict: Morse bond parameters with keys atom_i, atom_j, D_e, alpha, r0.
         """
         return {
-            "atom_i": self.morse_atoms[0],
-            "atom_j": self.morse_atoms[1],
-            "D_e": self.D_e,
-            "alpha": self.alpha,
-            "r0": self.r0,
+            'atom_i': self.morse_atoms[0],
+            'atom_j': self.morse_atoms[1],
+            'D_e': self.D_e,
+            'alpha': self.alpha,
+            'r0': self.r0,
         }
 
 
@@ -1861,7 +1861,7 @@ class EVBCalculation:
         rc_freq: int = 5,  # 0.01 ps @ 2 fs timestep
         steps: int = 500_000,  # 1 ns @ 2 fs timestep
         dt: float = 0.002,
-        platform: str = "CUDA",
+        platform: str = 'CUDA',
         restraint_sel: str | None = None,
     ):
         """Initialize a single EVB window calculation.
@@ -1892,9 +1892,9 @@ class EVBCalculation:
         )
 
         # Only set Precision for platforms that support it (CUDA, OpenCL)
-        if platform.upper() in ("CUDA", "OPENCL"):
+        if platform.upper() in ('CUDA', 'OPENCL'):
             self.sim_engine.properties = {
-                "Precision": "mixed",
+                'Precision': 'mixed',
             }
         else:
             self.sim_engine.properties = {}
@@ -1918,7 +1918,7 @@ class EVBCalculation:
         # Remove the original harmonic bond before adding Morse potential
         # to avoid double-counting the bonded interaction
         self.remove_harmonic_bond(
-            system, self.morse_bond["atom_i"], self.morse_bond["atom_j"]
+            system, self.morse_bond['atom_i'], self.morse_bond['atom_j']
         )
 
         # add various custom forces to system
@@ -1957,13 +1957,13 @@ class EVBCalculation:
             restart=False,
         )
         atom_indices = [
-            self.umbrella["atom_i"],
-            self.umbrella["atom_j"],
-            self.umbrella["atom_k"],
+            self.umbrella['atom_i'],
+            self.umbrella['atom_j'],
+            self.umbrella['atom_k'],
         ]
 
         simulation.reporters.append(
-            RCReporter(self.rc_file, self.rc_freq, atom_indices, self.umbrella["rc0"])
+            RCReporter(self.rc_file, self.rc_freq, atom_indices, self.umbrella['rc0'])
         )
 
         simulation.step(self.steps)
@@ -1986,10 +1986,10 @@ class EVBCalculation:
         """
         force = CustomCompoundBondForce(
             3,
-            "0.5 * k_umb * ((r13 - r23) - rc0) ^ 2; r13=distance(p1, p3); r23=distance(p2, p3);",
+            '0.5 * k_umb * ((r13 - r23) - rc0) ^ 2; r13=distance(p1, p3); r23=distance(p2, p3);',
         )
-        force.addGlobalParameter("k_umb", k)
-        force.addGlobalParameter("rc0", rc0)
+        force.addGlobalParameter('k_umb', k)
+        force.addGlobalParameter('rc0', rc0)
         force.addBond([atom_i, atom_j, atom_k])
 
         return force
@@ -2020,20 +2020,20 @@ class EVBCalculation:
         force = CustomCompoundBondForce(
             3,
             (
-                "k_path * (1 - costheta)^2; "
-                "costheta = dot_ij_ik / (r_ij * r_ik); "
-                "dot_ij_ik = dx_ij*dx_ik + dy_ij*dy_ik + dz_ij*dz_ik; "
-                "r_ij = sqrt(dx_ij^2 + dy_ij^2 + dz_ij^2); "
-                "r_ik = sqrt(dx_ik^2 + dy_ik^2 + dz_ik^2); "
-                "dx_ij = x2 - x1; "
-                "dy_ij = y2 - y1; "
-                "dz_ij = z2 - z1; "
-                "dx_ik = x3 - x1; "
-                "dy_ik = y3 - y1; "
-                "dz_ik = z3 - z1"
+                'k_path * (1 - costheta)^2; '
+                'costheta = dot_ij_ik / (r_ij * r_ik); '
+                'dot_ij_ik = dx_ij*dx_ik + dy_ij*dy_ik + dz_ij*dz_ik; '
+                'r_ij = sqrt(dx_ij^2 + dy_ij^2 + dz_ij^2); '
+                'r_ik = sqrt(dx_ik^2 + dy_ik^2 + dz_ik^2); '
+                'dx_ij = x2 - x1; '
+                'dy_ij = y2 - y1; '
+                'dz_ij = z2 - z1; '
+                'dx_ik = x3 - x1; '
+                'dy_ik = y3 - y1; '
+                'dz_ik = z3 - z1'
             ),
         )
-        force.addGlobalParameter("k_path", k_path)
+        force.addGlobalParameter('k_path', k_path)
         force.addBond([atom_i, atom_k, atom_j])
 
         return force
@@ -2066,10 +2066,10 @@ class EVBCalculation:
         Returns:
             CustomBondForce: Force corresponding to a Morse potential.
         """
-        force = CustomBondForce("D_e * (1 - exp(-alpha * (r-r0))) ^ 2")
-        force.addGlobalParameter("D_e", D_e)
-        force.addGlobalParameter("alpha", alpha)
-        force.addGlobalParameter("r0", r0)
+        force = CustomBondForce('D_e * (1 - exp(-alpha * (r-r0))) ^ 2')
+        force.addGlobalParameter('D_e', D_e)
+        force.addGlobalParameter('alpha', alpha)
+        force.addGlobalParameter('r0', r0)
         force.addBond(atom_i, atom_j)
 
         return force
@@ -2105,7 +2105,7 @@ class EVBCalculation:
                         # Zero out the force constant, keeping equilibrium length
                         force.setBondParameters(bond_idx, p1, p2, length, 0.0)
                         print(
-                            f"Zeroed harmonic bond between atoms {atom_i} and {atom_j}"
+                            f'Zeroed harmonic bond between atoms {atom_i} and {atom_j}'
                         )
                         found_bond = True
                         break
@@ -2122,10 +2122,10 @@ class EVBCalculation:
         # Remove constraints in reverse order to maintain indices
         for idx in reversed(constraints_to_remove):
             system.removeConstraint(idx)
-            print(f"Removed SHAKE constraint between atoms {atom_i} and {atom_j}")
+            print(f'Removed SHAKE constraint between atoms {atom_i} and {atom_j}')
             found_constraint = True
 
         if not found_bond and not found_constraint:
             print(
-                f"Warning: No harmonic bond or constraint found between atoms {atom_i} and {atom_j}"
+                f'Warning: No harmonic bond or constraint found between atoms {atom_i} and {atom_j}'
             )

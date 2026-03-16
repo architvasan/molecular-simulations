@@ -21,7 +21,7 @@ class ReferenceEnergyFinder:
         """
         if len(model.titrations) != 1:
             raise ValueError(
-                "The model compound must contain a single titratable residue"
+                'The model compound must contain a single titratable residue'
             )
         self.model = model
         self.pKa = pKa
@@ -31,7 +31,7 @@ class ReferenceEnergyFinder:
         self.residueIndex = next(iter(model.titrations.keys()))
         self.titration = model.titrations[self.residueIndex]
         if len(self.titration.explicitStates) != 2:
-            raise ValueError("Only residues with two states are currently supported")
+            raise ValueError('Only residues with two states are currently supported')
 
     def findReferenceEnergies(self, iterations=20000, substeps=20):
         """

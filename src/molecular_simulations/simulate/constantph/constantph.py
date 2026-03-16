@@ -1,3 +1,4 @@
+# ruff: noqa: RUF012
 """
 ConstantPH - Constant pH simulation using AMBER prmtop/inpcrd files directly.
 
@@ -11,6 +12,7 @@ Key features:
 - Only water and ions are stripped from the implicit system
 """
 
+import contextlib
 from collections import defaultdict
 from collections.abc import Sequence
 from copy import deepcopy
@@ -132,37 +134,37 @@ class ConstantPH:
 
     # Standard residues that can be parameterized by OpenMM ForceField
     PROTEIN_RESIDUES = {
-        "ALA",
-        "ARG",
-        "ASN",
-        "ASP",
-        "ASH",
-        "CYS",
-        "CYM",
-        "CYX",
-        "GLN",
-        "GLU",
-        "GLH",
-        "GLY",
-        "HIS",
-        "HID",
-        "HIE",
-        "HIP",
-        "ILE",
-        "LEU",
-        "LYS",
-        "LYN",
-        "MET",
-        "PHE",
-        "PRO",
-        "SER",
-        "THR",
-        "TRP",
-        "TYR",
-        "VAL",
-        "ACE",
-        "NME",
-        "NHE",
+        'ALA',
+        'ARG',
+        'ASN',
+        'ASP',
+        'ASH',
+        'CYS',
+        'CYM',
+        'CYX',
+        'GLN',
+        'GLU',
+        'GLH',
+        'GLY',
+        'HIS',
+        'HID',
+        'HIE',
+        'HIP',
+        'ILE',
+        'LEU',
+        'LYS',
+        'LYN',
+        'MET',
+        'PHE',
+        'PRO',
+        'SER',
+        'THR',
+        'TRP',
+        'TYR',
+        'VAL',
+        'ACE',
+        'NME',
+        'NHE',
     }
 
     # Ion elements to exclude from implicit system
@@ -180,47 +182,47 @@ class ConstantPH:
 
     # Water/ion residue names to strip (lipids and ligands are KEPT)
     WATER_ION_NAMES = {
-        "HOH",
-        "WAT",
-        "Na+",
-        "Cl-",
-        "NA",
-        "CL",
-        "K+",
-        "K",
-        "SOD",
-        "CLA",
-        "POT",
-        "OPC",
-        "TIP3",
-        "SPC",
+        'HOH',
+        'WAT',
+        'Na+',
+        'Cl-',
+        'NA',
+        'CL',
+        'K+',
+        'K',
+        'SOD',
+        'CLA',
+        'POT',
+        'OPC',
+        'TIP3',
+        'SPC',
     }
 
     # Titratable hydrogen differences: maps (deprotonated, protonated) variant pairs
     # to the number of hydrogens LOST when going from protonated to deprotonated
     TITRATION_H_DIFF = {
         # Aspartate: ASH (protonated) -> ASP (deprotonated), loses 1 H
-        ("ASP", "ASH"): -1,
-        ("ASH", "ASP"): 1,
+        ('ASP', 'ASH'): -1,
+        ('ASH', 'ASP'): 1,
         # Glutamate: GLH (protonated) -> GLU (deprotonated), loses 1 H
-        ("GLU", "GLH"): -1,
-        ("GLH", "GLU"): 1,
+        ('GLU', 'GLH'): -1,
+        ('GLH', 'GLU'): 1,
         # Histidine: HIP (doubly protonated) -> HID/HIE (singly protonated)
-        ("HID", "HIP"): -1,
-        ("HIP", "HID"): 1,
-        ("HIE", "HIP"): -1,
-        ("HIP", "HIE"): 1,
-        ("HID", "HIE"): 0,
-        ("HIE", "HID"): 0,  # Same H count, different position
+        ('HID', 'HIP'): -1,
+        ('HIP', 'HID'): 1,
+        ('HIE', 'HIP'): -1,
+        ('HIP', 'HIE'): 1,
+        ('HID', 'HIE'): 0,
+        ('HIE', 'HID'): 0,  # Same H count, different position
         # Lysine: LYS (protonated) -> LYN (neutral), loses 1 H
-        ("LYN", "LYS"): -1,
-        ("LYS", "LYN"): 1,
+        ('LYN', 'LYS'): -1,
+        ('LYS', 'LYN'): 1,
         # Cysteine: CYS (protonated thiol) -> CYM (deprotonated thiolate)
-        ("CYM", "CYS"): -1,
-        ("CYS", "CYM"): 1,
+        ('CYM', 'CYS'): -1,
+        ('CYS', 'CYM'): 1,
         # Tyrosine: TYR (protonated) -> TYD (deprotonated phenolate)
-        ("TYD", "TYR"): -1,
-        ("TYR", "TYD"): 1,
+        ('TYD', 'TYR'): -1,
+        ('TYR', 'TYD'): 1,
     }
 
     def __init__(
@@ -237,7 +239,7 @@ class ConstantPH:
         relaxationIntegrator,
         implicitForceField=None,
         excludeResidues=None,
-        gbModel="GBn2",
+        gbModel='GBn2',
         weights=None,
         platform=None,
         properties=None,
@@ -248,7 +250,7 @@ class ConstantPH:
         self.inpcrd_file = str(inpcrd_file)
 
         # Load AMBER topology and coordinates
-        print("Loading AMBER topology...")
+        print('Loading AMBER topology...')
         self.prmtop = AmberPrmtopFile(self.prmtop_file)
         self.inpcrd = AmberInpcrdFile(self.inpcrd_file)
 
@@ -267,12 +269,12 @@ class ConstantPH:
         # excludeResidues is no longer used - we keep lipids and ligands!
         # Only water and ions are stripped
         if excludeResidues is not None:
-            print("  Note: excludeResidues parameter is deprecated.")
-            print("        Lipids and ligands are now INCLUDED in MC evaluations.")
+            print('  Note: excludeResidues parameter is deprecated.')
+            print('        Lipids and ligands are now INCLUDED in MC evaluations.')
 
         # Set up implicit ForceField (for building protonation state params only)
         if implicitForceField is None:
-            self.implicitForceField = ForceField("amber14-all.xml", "implicit/gbn2.xml")
+            self.implicitForceField = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
         else:
             self.implicitForceField = implicitForceField
 
@@ -283,32 +285,32 @@ class ConstantPH:
             self.titrations[resIndex] = ResidueTitration(variants, energies)
 
         # Build implicit system with lipids/ligands using ParmEd
-        print("Building implicit solvent system (includes lipids and ligands)...")
+        print('Building implicit solvent system (includes lipids and ligands)...')
         self._buildImplicitSystemWithParmEd()
 
         # Build protein-only topology for protonation state parameters
-        print("Building protein-only topology for protonation states...")
+        print('Building protein-only topology for protonation states...')
         self._buildProteinOnlyTopology(residueVariants)
 
         # Build protonation states for each titratable residue
-        print("Computing protonation state parameters...")
+        print('Computing protonation state parameters...')
         self._buildProtonationStates(residueVariants)
 
         # Map protonation states to implicit system (fix force indices)
-        print("Mapping protonation states to implicit system...")
+        print('Mapping protonation states to implicit system...')
         self._mapStatesToImplicitSystem()
 
         # Create the explicit system from AMBER topology
-        print("Creating explicit solvent system from AMBER topology...")
+        print('Creating explicit solvent system from AMBER topology...')
         self._buildExplicitSystem(
             integrator, relaxationIntegrator, platform, properties
         )
 
         # Map protonation states to explicit system
-        print("Mapping protonation states to explicit system...")
+        print('Mapping protonation states to explicit system...')
         self._mapStatesToExplicitSystem()
 
-        print("ConstantPHAmber initialization complete.")
+        print('ConstantPHAmber initialization complete.')
 
     def _buildImplicitSystemWithParmEd(self):
         """
@@ -326,29 +328,17 @@ class ConstantPH:
         # Load structure with ParmEd
         parm = pmd.load_file(self.prmtop_file, self.inpcrd_file)
 
-        # Build selection to keep everything EXCEPT water and ions
-        # ParmEd uses AMBER mask syntax with ! for negation
-        water_ion_residues = list(self.WATER_ION_NAMES)
-
         # Select atoms to keep (negate water/ion selection)
         # Use ParmEd's slice syntax to create a subset
         keep_indices = []
-        for i, residue in enumerate(parm.residues):
+        for residue in parm.residues:
             # Check if residue is water or ion
             is_water_ion = residue.name in self.WATER_ION_NAMES
-            if not is_water_ion:
+            if not is_water_ion: # noqa: SIM102
                 # Also check for single-atom ions by element
-                if len(residue.atoms) == 1:
-                    atom = residue.atoms[0]
-                    if atom.element in [
-                        11,
-                        17,
-                        19,
-                        35,
-                        37,
-                        55,
-                    ]:  # Na, Cl, K, Br, Rb, Cs
-                        is_water_ion = True
+                if (len(residue.atoms) == 1 and
+                    residue.atoms[0].element in [11, 17, 19, 35, 37, 55]): # Na, Cl, K, Br, Rb, Cs
+                    is_water_ion = True
 
             if not is_water_ion:
                 for atom in residue.atoms:
@@ -381,17 +371,17 @@ class ConstantPH:
         self._strippedParm = stripped_parm
 
         # Determine GB model
-        if self.gbModel == "GBn2":
+        if self.gbModel == 'GBn2':
             implicitSolvent = GBn2
-        elif self.gbModel == "OBC2":
+        elif self.gbModel == 'OBC2':
             implicitSolvent = OBC2
         else:
-            raise ValueError(f"Unknown GB model: {self.gbModel}. Use GBn2 or OBC2.")
+            raise ValueError(f'Unknown GB model: {self.gbModel}. Use GBn2 or OBC2.')
 
         # Create implicit system with GB using ParmEd
         # This preserves all AMBER bonded parameters
-        solventDielectric = self._implicitArgs.get("solventDielectric", 78.5)
-        soluteDielectric = self._implicitArgs.get("soluteDielectric", 1.0)
+        solventDielectric = self._implicitArgs.get('solventDielectric', 78.5)
+        soluteDielectric = self._implicitArgs.get('soluteDielectric', 1.0)
 
         self.implicitSystem = stripped_parm.createSystem(
             nonbondedMethod=NoCutoff,
@@ -413,19 +403,19 @@ class ConstantPH:
         n_lipid = sum(
             1
             for r in stripped_parm.residues
-            if r.name in {"PA", "PC", "PE", "OL", "GL"}
+            if r.name in {'PA', 'PC', 'PE', 'OL', 'GL'}
         )
         n_other = len(stripped_parm.residues) - n_protein - n_lipid
 
-        print("  Stripped water and ions only")
+        print('  Stripped water and ions only')
         print(
-            f"  Implicit system: {len(stripped_parm.residues)} residues, "
-            f"{len(stripped_parm.atoms)} atoms"
+            f'  Implicit system: {len(stripped_parm.residues)} residues, '
+            f'{len(stripped_parm.atoms)} atoms'
         )
-        print(f"    Protein: {n_protein} residues")
-        print(f"    Lipids: {n_lipid} residues (PA/PC/PE/OL/GL)")
-        print(f"    Other (ligands, etc.): {n_other} residues")
-        print(f"    GB model: {self.gbModel}")
+        print(f'    Protein: {n_protein} residues')
+        print(f'    Lipids: {n_lipid} residues (PA/PC/PE/OL/GL)')
+        print(f'    Other (ligands, etc.): {n_other} residues')
+        print(f'    GB model: {self.gbModel}')
 
     def _buildProteinOnlyTopology(self, residueVariants):
         """
@@ -462,8 +452,8 @@ class ConstantPH:
         self.proteinPositions = modeller.positions
 
         print(
-            f"  Protein-only topology: {self.proteinTopology.getNumResidues()} residues, "
-            f"{self.proteinTopology.getNumAtoms()} atoms"
+            f'  Protein-only topology: {self.proteinTopology.getNumResidues()} residues, '
+            f'{self.proteinTopology.getNumAtoms()} atoms'
         )
 
     def _buildProtonationStates(self, residueVariants):
@@ -538,7 +528,7 @@ class ConstantPH:
             # Update numHydrogens for each state based on variant differences
             protonatedVariant = variants[protonatedIdx]
             for i, (state, variant) in enumerate(
-                zip(titration.implicitStates, variants)
+                zip(titration.implicitStates, variants, strict=True)
             ):
                 if i == protonatedIdx:
                     continue
@@ -552,8 +542,8 @@ class ConstantPH:
                         != titration.implicitStates[protonatedIdx].numHydrogens
                     ):
                         print(
-                            f"  Res {resIndex}: {variant} has {state.numHydrogens} H "
-                            f"(vs {baselineH} for {protonatedVariant})"
+                            f'  Res {resIndex}: {variant} has {state.numHydrogens} H '
+                            f'(vs {baselineH} for {protonatedVariant})'
                         )
 
             titration.currentIndex = titration.protonatedIndex
@@ -570,9 +560,7 @@ class ConstantPH:
         - TYR > TYD (TYR has the phenolic proton)
         """
         # Protonated forms (higher proton count)
-        PROTONATED_FORMS = {"ASH", "GLH", "HIP", "LYS", "CYS", "TYR"}
-        # Deprotonated forms (lower proton count)
-        DEPROTONATED_FORMS = {"ASP", "GLU", "HID", "HIE", "LYN", "CYM", "TYD"}
+        PROTONATED_FORMS = {'ASH', 'GLH', 'HIP', 'LYS', 'CYS', 'TYR'}
 
         # Find the variant with the most protons
         for i, variant in enumerate(variants):
@@ -582,14 +570,14 @@ class ConstantPH:
         # If no protonated form found, check for intermediate forms
         # For histidine: HID and HIE are equally protonated (singly)
         for i, variant in enumerate(variants):
-            if variant in {"HID", "HIE"}:
+            if variant in {'HID', 'HIE'}:
                 return i
 
         # Fallback: assume first variant is protonated
         # (This handles custom residue types)
         print(
-            f"  Warning: Could not identify protonated state for variants {variants}, "
-            f"assuming index 0"
+            f'  Warning: Could not identify protonated state for variants {variants}, '
+            f'assuming index 0'
         )
         return 0
 
@@ -611,7 +599,7 @@ class ConstantPH:
                 implicitGBForceIdx = fi
 
         if implicitNBForceIdx is None:
-            raise RuntimeError("No NonbondedForce found in implicit system")
+            raise RuntimeError('No NonbondedForce found in implicit system')
 
         implicitNBForce = self.implicitSystem.getForce(implicitNBForceIdx)
         implicitGBForce = (
@@ -628,9 +616,9 @@ class ConstantPH:
         ffForceTypes = {}
         for fi, force in enumerate(tempSystem.getForces()):
             if isinstance(force, NonbondedForce):
-                ffForceTypes[fi] = "NB"
+                ffForceTypes[fi] = 'NB'
             elif isinstance(force, GBSAOBCForce):
-                ffForceTypes[fi] = "GB"
+                ffForceTypes[fi] = 'GB'
 
         for resIndex, titration in self.titrations.items():
             for state in titration.implicitStates:
@@ -639,9 +627,9 @@ class ConstantPH:
                 ffGBForceIdx = None
                 for fi in state.particleParameters:
                     if fi in ffForceTypes:
-                        if ffForceTypes[fi] == "NB":
+                        if ffForceTypes[fi] == 'NB':
                             ffNBForceIdx = fi
-                        elif ffForceTypes[fi] == "GB":
+                        elif ffForceTypes[fi] == 'GB':
                             ffGBForceIdx = fi
 
                 # Remap particle parameters to use implicit system force indices
@@ -738,7 +726,8 @@ class ConstantPH:
                         originalParams = protonatedExceptionParams[key]
                         stateExceptionParams[key] = (
                             0.0 * elementary_charge**2,
-                        ) + originalParams[1:]
+                            *originalParams[1:]
+                        )
                 state.exceptionParameters[implicitNBForceIdx] = stateExceptionParams
 
     def _findResidueStates(self, topology, positions, forcefield, variants, ffargs):
@@ -751,20 +740,18 @@ class ConstantPH:
         residues = list(modeller.topology.residues())
         states = []
 
-        for residue, variant in zip(residues, variants):
+        for residue, variant in zip(residues, variants, strict=True):
             if variant is not None:
                 atomIndices = {atom.name: atom.index for atom in residue.atoms()}
                 particleParameters = {}
                 exceptionParameters = {}
 
                 for i, force in enumerate(system.getForces()):
-                    try:
+                    with contextlib.supress(Exception):
                         particleParameters[i] = {
                             atom.name: force.getParticleParameters(atom.index)
                             for atom in residue.atoms()
                         }
-                    except:
-                        pass
 
                     if isinstance(force, NonbondedForce):
                         exceptionParameters[i] = {}
@@ -806,10 +793,10 @@ class ConstantPH:
         # Create relaxation system (frozen non-solvent)
         relaxationSystem = deepcopy(self.explicitSystem)
         for residue in self.explicitTopology.residues():
-            isWater = residue.name == "HOH"
+            isWater = residue.name == 'HOH'
             isIon = (
                 len(residue) == 1
-                and list(residue.atoms())[0].element in self.ION_ELEMENTS
+                and next(iter(residue.atoms())).element in self.ION_ELEMENTS
             )
             if not isWater and not isIon:
                 for atom in residue.atoms():
@@ -934,7 +921,7 @@ class ConstantPH:
                 break
 
         if explicitNBForceIdx is None:
-            raise RuntimeError("No NonbondedForce found in explicit system")
+            raise RuntimeError('No NonbondedForce found in explicit system')
 
         explicitNBForce = self.explicitSystem.getForce(explicitNBForceIdx)
 
@@ -947,7 +934,7 @@ class ConstantPH:
             }
 
             # First pass: build all explicit states with their original parameters
-            for i, implicitState in enumerate(titration.implicitStates):
+            for implicitState in titration.implicitStates:
                 # Get implicit NonbondedForce index
                 implicitNBForceIdx = None
                 for fi in implicitState.particleParameters:
@@ -1118,22 +1105,22 @@ class ConstantPH:
 
     def printTitrationState(self):
         """Print current state of all titrations for debugging."""
-        print(f"Current pH: {self.pH[self.currentPHIndex]:.2f}")
-        print(f"Titratable residues: {len(self.titrations)}")
+        print(f'Current pH: {self.pH[self.currentPHIndex]:.2f}')
+        print(f'Titratable residues: {len(self.titrations)}')
         for resIndex, titration in self.titrations.items():
             current = titration.currentIndex
             protonated = titration.protonatedIndex
             print(
-                f"  Res {resIndex}: currentState={current}, protonatedIdx={protonated}"
+                f'  Res {resIndex}: currentState={current}, protonatedIdx={protonated}'
             )
-            print(f"    variants={titration.variants}")
-            print(f"    refEnergies={titration.referenceEnergies}")
+            print(f'    variants={titration.variants}')
+            print(f'    refEnergies={titration.referenceEnergies}')
             for i, (impl, expl) in enumerate(
                 zip(titration.implicitStates, titration.explicitStates, strict=True)
             ):
                 print(
-                    f"    state[{i}]: implicitH={impl.numHydrogens}, explicitH={expl.numHydrogens}, "
-                    f"implAtoms={len(impl.atomIndices)}, explAtoms={len(expl.atomIndices)}"
+                    f'    state[{i}]: implicitH={impl.numHydrogens}, explicitH={expl.numHydrogens}, '
+                    f'implAtoms={len(impl.atomIndices)}, explAtoms={len(expl.atomIndices)}'
                 )
 
     def validateStates(self):
@@ -1143,11 +1130,11 @@ class ConstantPH:
             # Check we have the right number of states
             if len(titration.implicitStates) != len(titration.variants):
                 issues.append(
-                    f"Res {resIndex}: {len(titration.implicitStates)} implicit states but {len(titration.variants)} variants"
+                    f'Res {resIndex}: {len(titration.implicitStates)} implicit states but {len(titration.variants)} variants'
                 )
             if len(titration.explicitStates) != len(titration.variants):
                 issues.append(
-                    f"Res {resIndex}: {len(titration.explicitStates)} explicit states but {len(titration.variants)} variants"
+                    f'Res {resIndex}: {len(titration.explicitStates)} explicit states but {len(titration.variants)} variants'
                 )
 
             # Check numHydrogens differs between states
@@ -1155,26 +1142,26 @@ class ConstantPH:
             explicitHydrogens = [s.numHydrogens for s in titration.explicitStates]
             if len(set(implicitHydrogens)) == 1:
                 issues.append(
-                    f"Res {resIndex}: all implicit states have same numHydrogens={implicitHydrogens[0]}"
+                    f'Res {resIndex}: all implicit states have same numHydrogens={implicitHydrogens[0]}'
                 )
             if len(set(explicitHydrogens)) == 1:
                 issues.append(
-                    f"Res {resIndex}: all explicit states have same numHydrogens={explicitHydrogens[0]}"
+                    f'Res {resIndex}: all explicit states have same numHydrogens={explicitHydrogens[0]}'
                 )
 
             # Check protonated index makes sense
             if titration.protonatedIndex >= len(titration.implicitStates):
                 issues.append(
-                    f"Res {resIndex}: protonatedIndex={titration.protonatedIndex} out of range"
+                    f'Res {resIndex}: protonatedIndex={titration.protonatedIndex} out of range'
                 )
 
         if issues:
-            print("State validation FAILED:")
+            print('State validation FAILED:')
             for issue in issues:
-                print(f"  - {issue}")
+                print(f'  - {issue}')
             return False
         else:
-            print("State validation PASSED")
+            print('State validation PASSED')
             return True
 
     def attemptMCStep(self, temperature, debug=False):
@@ -1198,20 +1185,20 @@ class ConstantPH:
 
         if debug:
             if np.any(np.isnan(implicitPositions)):
-                print("WARNING: NaN in implicit positions!")
+                print('WARNING: NaN in implicit positions!')
             testEnergy = self.implicitContext.getState(
                 getEnergy=True
             ).getPotentialEnergy()
             if np.isnan(testEnergy.value_in_unit(kilojoules_per_mole)):
                 print(
-                    "WARNING: Implicit context energy is NaN after setting positions!"
+                    'WARNING: Implicit context energy is NaN after setting positions!'
                 )
-                print(f"  Explicit pos has NaN: {np.any(np.isnan(explicitPositions))}")
-                print(f"  Implicit pos has NaN: {np.any(np.isnan(implicitPositions))}")
+                print(f'  Explicit pos has NaN: {np.any(np.isnan(explicitPositions))}')
+                print(f'  Implicit pos has NaN: {np.any(np.isnan(implicitPositions))}')
                 print(
-                    f"  implicitAtomIndex range: {self.implicitAtomIndex.min()}-{self.implicitAtomIndex.max()}"
+                    f'  implicitAtomIndex range: {self.implicitAtomIndex.min()}-{self.implicitAtomIndex.max()}'
                 )
-                print(f"  explicitPositions shape: {explicitPositions.shape}")
+                print(f'  explicitPositions shape: {explicitPositions.shape}')
 
         periodicDistance = compiled.periodicDistance(
             state.getPeriodicBoxVectors().value_in_unit(nanometers)
@@ -1287,18 +1274,18 @@ class ConstantPH:
 
                 if np.isnan(dE) or np.isnan(dRef):
                     print(
-                        f"  Residue {titrations[0].implicitStates[0].residueIndex}: "
-                        f"NaN DETECTED! currE={currE}, newE={newE}, "
-                        f"refs=[{titrations[0].referenceEnergies}]"
+                        f'  Residue {titrations[0].implicitStates[0].residueIndex}: '
+                        f'NaN DETECTED! currE={currE}, newE={newE}, '
+                        f'refs=[{titrations[0].referenceEnergies}]'
                     )
                 else:
                     print(
-                        f"  Residue {titrations[0].implicitStates[0].residueIndex}: "
-                        f"state {titrations[0].currentIndex}->{stateIndex[0]}, "
-                        f"deltaN={deltaN}, pH={self.pH[self.currentPHIndex]:.2f}, "
-                        f"dE={dE:.2f} kJ/mol, "
-                        f"dRef={dRef:.2f} kJ/mol, "
-                        f"w={float(w):.3f}, "
+                        f'  Residue {titrations[0].implicitStates[0].residueIndex}: '
+                        f'state {titrations[0].currentIndex}->{stateIndex[0]}, '
+                        f'deltaN={deltaN}, pH={self.pH[self.currentPHIndex]:.2f}, '
+                        f'dE={dE:.2f} kJ/mol, '
+                        f'dRef={dRef:.2f} kJ/mol, '
+                        f'w={float(w):.3f}, '
                         f"accept={'yes' if w <= 0 else f'prob={np.exp(-float(w)):.4f}'}"
                     )
 
@@ -1398,7 +1385,7 @@ class ConstantPH:
         else:
             # For custom forces, find the charge parameter by name
             for i in range(force.getNumPerParticleParameters()):
-                if force.getPerParticleParameterName(i) == "charge":
+                if force.getPerParticleParameterName(i) == 'charge':
                     p[i] = 0.0
         return tuple(p)
 
@@ -1444,12 +1431,12 @@ class ConstantPH:
                     q2, _, _ = force.getParticleParameters(p2)
                     q1_val = (
                         q1.value_in_unit(elementary_charge)
-                        if hasattr(q1, "value_in_unit")
+                        if hasattr(q1, 'value_in_unit')
                         else float(q1)
                     )
                     q2_val = (
                         q2.value_in_unit(elementary_charge)
-                        if hasattr(q2, "value_in_unit")
+                        if hasattr(q2, 'value_in_unit')
                         else float(q2)
                     )
                     chargeProd = coulomb14Scale * q1_val * q2_val * elementary_charge**2
