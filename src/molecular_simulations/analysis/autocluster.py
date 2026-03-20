@@ -6,7 +6,7 @@ trajectory data using KMeans++ with dimensionality reduction.
 
 import json
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import polars as pl
@@ -16,7 +16,19 @@ from sklearn.metrics import silhouette_score
 from tqdm import tqdm
 
 PathLike = Path | str
-_T = TypeVar('_T')
+
+
+@runtime_checkable
+class DataloaderProtocol(Protocol):
+    """Protocol for dataloader classes used by AutoKMeans."""
+
+    files: list[PathLike]
+
+    @property
+    def data(self) -> np.ndarray: ...
+
+    @property
+    def shape(self) -> tuple[int, ...] | list[tuple[int, ...]]: ...
 
 
 class GenericDataloader:
@@ -45,6 +57,8 @@ class GenericDataloader:
             data_files: List of paths to input data files (.npy format).
         """
         self.files = data_files
+        self.data_array: np.ndarray = np.array([])
+        self.shapes: list[tuple[int, ...]] = []
         self.load_data()
 
     def load_data(self) -> None:
@@ -53,14 +67,14 @@ class GenericDataloader:
         Lumps data into one large array by vertical stacking. If the
         resulting array has more than 2 dimensions, it is reshaped to 2D.
         """
-        self.data_array = []
+        data_list: list[np.ndarray] = []
         self.shapes = []
         for f in self.files:
             temp = np.load(str(f))
             self.shapes.append(temp.shape)
-            self.data_array.append(temp)
+            data_list.append(temp)
 
-        self.data_array = np.vstack(self.data_array)
+        self.data_array = np.vstack(data_list)
         if len(self.data_array) > 2:
             x, *y = self.data_array.shape
             shape2 = 1
@@ -79,7 +93,7 @@ class GenericDataloader:
         return self.data_array
 
     @property
-    def shape(self) -> tuple[int]:
+    def shape(self) -> tuple[int, ...] | list[tuple[int, ...]]:
         """Return the shape(s) of the input data.
 
         Returns:
@@ -123,15 +137,15 @@ class PeriodicDataloader(GenericDataloader):
         Loads each file, applies the periodicity removal transformation,
         and stores the results.
         """
-        self.data_array = []
+        data_list: list[np.ndarray] = []
         self.shapes = []
         for f in self.files:
             temp = self.remove_periodicity(np.load(str(f)))
 
             self.shapes.append(temp.shape)
-            self.data_array.append(temp)
+            data_list.append(temp)
 
-        self.data_array = np.vstack(self.data_array)
+        self.data_array = np.vstack(data_list)
 
     def remove_periodicity(self, arr: np.ndarray) -> np.ndarray:
         """Remove periodicity from each feature using sin and cos.
@@ -198,7 +212,7 @@ class AutoKMeans:
         self,
         data_directory: PathLike,
         pattern: str = '',
-        dataloader: type[_T] = GenericDataloader,
+        dataloader: type[GenericDataloader] = GenericDataloader,
         max_clusters: int = 10,
         stride: int = 1,
         reduction_algorithm: str = 'PCA',
@@ -216,7 +230,9 @@ class AutoKMeans:
             reduction_kws: Arguments for the reduction algorithm.
         """
         self.data_dir = Path(data_directory)
-        self.dataloader = dataloader(list(self.data_dir.glob(f'{pattern}*.npy')))
+        self.dataloader: DataloaderProtocol = dataloader(
+            list(self.data_dir.glob(f'{pattern}*.npy'))
+        )
         self.data = self.dataloader.data
         self.shape = self.dataloader.shape
 
@@ -283,13 +299,21 @@ class AutoKMeans:
         Finds and stores the data point which lies closest to each
         cluster center, recording the replica and frame indices.
         """
+        if self.centers is None:
+            msg = 'No cluster centers found. Run sweep_n_clusters first.'
+            raise ValueError(msg)
+        shape = self.shape
+        if not isinstance(shape, tuple):
+            msg = 'Cannot map centers when input files have different shapes.'
+            raise ValueError(msg)
+        n_frames: int = shape[0]
         cluster_centers = {i: None for i in range(len(self.centers))}
         for i, center in enumerate(self.centers):
             closest = 100.0
             for p, point in enumerate(self.reduced):
                 if (dist := np.linalg.norm(point - center)) < closest:
-                    rep = p // self.shape[0]
-                    frame = p % self.shape[0]
+                    rep = p // n_frames
+                    frame = p % n_frames
                     cluster_centers[i] = (rep, frame)
                     closest = dist
 
@@ -358,9 +382,17 @@ class Decomposition:
         Raises:
             KeyError: If an unsupported algorithm is specified.
         """
-        algorithms = {'PCA': PCA, 'TICA': None, 'UMAP': None}
+        algorithms: dict[str, type[PCA] | None] = {
+            'PCA': PCA,
+            'TICA': None,
+            'UMAP': None,
+        }
 
-        self.decomposer = algorithms[algorithm](**kwargs)
+        algo = algorithms[algorithm]
+        if algo is None:
+            msg = f'Algorithm {algorithm!r} is not yet supported.'
+            raise ValueError(msg)
+        self.decomposer = algo(**kwargs)
 
     def fit(self, X: np.ndarray) -> None:
         """Fit the decomposer with data.

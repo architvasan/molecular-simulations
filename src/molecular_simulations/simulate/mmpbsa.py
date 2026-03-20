@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 # ruff: noqa: SIM115
 """MM-P(G)BSA calculation module.
 
@@ -33,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_energy_calculation(
-    args: tuple[str], max_retries: int = 3
+    args: tuple[str, str, str, str, str, str, str], max_retries: int = 3
 ) -> tuple[Path, bool, str]:
     """Worker function for parallel energy calculations.
 
@@ -62,7 +64,7 @@ def _run_energy_calculation(
                 with open(expected_output) as f:
                     content = f.read()
                     if ' BOND' in content:
-                        return (out, True, '')
+                        return (Path(out), True, '')
                     else:
                         error = 'Output file exists but contains no energy data'
             else:
@@ -83,11 +85,11 @@ def _run_energy_calculation(
             logger.warning(f'Error: {error}')
             time.sleep(2**attempt)
 
-    return (out, False, error)
+    return (Path(out), False, error)
 
 
 def _run_sasa_calculation(
-    args: tuple[str], max_retries: int = 3
+    args: tuple[str, str, str], max_retries: int = 3
 ) -> tuple[Path, bool, str]:
     """Worker function for parallel SASA calculations.
 
@@ -130,7 +132,7 @@ def _run_sasa_calculation(
                             if line.strip() and not line.strip().startswith('#')
                         ]
                         if len(data_lines) > 0:
-                            return (sasa_script, True, '')
+                            return (Path(sasa_script), True, '')
                         else:
                             error = 'Output file has no data lines'
                 else:
@@ -352,7 +354,7 @@ class MMPBSA(MMPBSASettings):
             pb_mdin: Path to PB input file.
         """
         for prefix, top, traj, pdb in self.fh.files:
-            logger.debug(f'Computing energy terms for {prefix.name}.')
+            logger.debug(f'Computing energy terms for {Path(prefix).name}.')
             self.calculate_sasa(prefix, top, traj)
             self.calculate_energy(prefix, top, traj, pdb, gb_mdin, 'gb')
             self.calculate_energy(prefix, top, traj, pdb, pb_mdin, 'pb')
@@ -551,7 +553,7 @@ class MMPBSA(MMPBSASettings):
                 for chunk_file in chunk_files:
                     chunk_file.unlink()
 
-    def calculate_sasa(self, pre: str, prm: PathLike, trj: PathLike) -> None:
+    def calculate_sasa(self, pre: PathLike, prm: PathLike, trj: PathLike) -> None:
         """Calculate SASA using cpptraj's molsurf command.
 
         Args:
@@ -581,7 +583,7 @@ class MMPBSA(MMPBSASettings):
 
     def calculate_energy(
         self,
-        pre: str,
+        pre: PathLike,
         prm: PathLike,
         trj: PathLike,
         pdb: PathLike,
@@ -782,7 +784,7 @@ class OutputAnalyzer:
         self.generate_summary()
         self.compute_dG()
 
-    def read_sasa(self, _file: PathLike) -> np.ndarray:
+    def read_sasa(self, _file: PathLike) -> pl.Series:
         """Read cpptraj SASA calculation results.
 
         Args:
@@ -1045,7 +1047,7 @@ class OutputAnalyzer:
             print(print_statement)
 
     @staticmethod
-    def parse_line(line) -> tuple[list[str], list[float]]:
+    def parse_line(line: str) -> zip[tuple[str, float]]:
         """Parse an energy line from mmpbsa_energy output.
 
         Args:
@@ -1353,7 +1355,7 @@ class FileHandler:
         )
 
     @property
-    def files(self) -> tuple[list[str]]:
+    def files(self) -> zip[tuple[Path, Path, Path, Path]]:
         """Get file paths for each system.
 
         Returns:
@@ -1380,14 +1382,13 @@ class FileHandler:
         return result
 
     @staticmethod
-    def write_file(lines: list[str], filepath: PathLike) -> None:
+    def write_file(lines: list[str] | str, filepath: PathLike) -> None:
         """Write lines to a file.
 
         Args:
             lines: Input lines (list or string).
             filepath: Output file path.
         """
-        if isinstance(lines, list):
-            lines = '\n'.join(lines)
+        content = '\n'.join(lines) if isinstance(lines, list) else lines
         with open(str(filepath), 'w') as f:
-            f.write(lines)
+            f.write(content)

@@ -19,8 +19,8 @@ from MDAnalysis.analysis.distances import distance_array
 from MDAnalysis.lib.util import convert_aa_code
 
 PathLike = Path | str
-Results = dict[str, dict[str, float]]
-TaskTree = tuple[list[Callable], list[str]]
+Results = dict[str, dict[str, dict[str, float]]]
+TaskTree = tuple[list[Callable[..., int | float]], list[str]]
 
 
 class PPInteractions:
@@ -68,7 +68,7 @@ class PPInteractions:
         out: PathLike,
         sel1: str = 'chainID A',
         sel2: str = 'chainID B',
-        cov_cutoff: tuple[float] = (11.0, 13.0),
+        cov_cutoff: tuple[float, float] = (11.0, 13.0),
         sb_cutoff: float = 6.0,
         hbond_cutoff: float = 3.5,
         hbond_angle: float = 30.0,
@@ -127,7 +127,7 @@ class PPInteractions:
         if self.plot:
             self.plot_results(results)
 
-    def compute_interactions(self, res1: int, res2: int) -> Results:
+    def compute_interactions(self, res1: int, res2: int) -> dict[str, dict[str, float]]:
         """Compute interaction probabilities between two residues.
 
         Generates MDAnalysis AtomGroups for each residue, identifies
@@ -239,7 +239,7 @@ class PPInteractions:
 
         self.mapping = mapping
 
-    def interpret_covariance(self, cov_mat: np.ndarray) -> tuple[tuple[int, int]]:
+    def interpret_covariance(self, cov_mat: np.ndarray) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
         """Identify residue pairs with positive or negative correlations.
 
         Args:
@@ -425,7 +425,7 @@ class PPInteractions:
 
     def survey_donors_acceptors(
         self, res1: mda.AtomGroup, res2: mda.AtomGroup
-    ) -> tuple[mda.AtomGroup]:
+    ) -> tuple[mda.AtomGroup, mda.AtomGroup]:
         """Identify potential hydrogen bond donors and acceptors.
 
         First-pass distance threshold to identify potential hydrogen bonds.

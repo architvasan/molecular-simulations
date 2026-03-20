@@ -7,5 +7,4 @@ with contextlib.suppress(ImportError):
         AuroraSettings,
         LocalSettings,
         PolarisSettings,
-        WorkstationSettings,
     )

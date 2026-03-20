@@ -52,7 +52,7 @@ class EmbedData:
         """
         self.pdb = pdb if isinstance(pdb, Path) else Path(pdb)
         self.embeddings = embedding_dict
-        self.out = out if out is not None else self.pdb
+        self.out: Path = Path(out) if out is not None else self.pdb
 
         self.u = mda.Universe(str(self.pdb))
 
@@ -87,7 +87,7 @@ class EmbedData:
         original PDB with '.orig.pdb' extension (only if backup doesn't
         already exist to prevent overwriting the true original).
         """
-        if self.out.exists() and not self.pdb.with_suffix('orig.pdb').exists():
+        if self.out.exists() and not self.pdb.with_suffix('.orig.pdb').exists():
             shutil.copyfile(str(self.pdb), str(self.pdb.with_suffix('.orig.pdb')))
 
         with mda.Writer(str(self.out)) as W:

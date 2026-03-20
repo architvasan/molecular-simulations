@@ -33,14 +33,14 @@ from openmm.app import (
     element,
 )
 from openmm.app.forcefield import NonbondedGenerator
-from openmm.app.internal import compiled
+from openmm.app.internal import compiled  # ty: ignore[unresolved-import]
 from openmm.unit import (
     MOLAR_GAS_CONSTANT_R,
     elementary_charge,
     is_quantity,
     kelvin,
     kilojoules_per_mole,
-    nanometers,
+    nanometers,  # ty: ignore[unresolved-import]
 )
 
 
@@ -747,7 +747,7 @@ class ConstantPH:
                 exceptionParameters = {}
 
                 for i, force in enumerate(system.getForces()):
-                    with contextlib.supress(Exception):
+                    with contextlib.suppress(Exception):
                         particleParameters[i] = {
                             atom.name: force.getParticleParameters(atom.index)
                             for atom in residue.atoms()

@@ -49,14 +49,14 @@ def run_cph_sim(
     """
     from openmm import LangevinIntegrator
     from openmm.app import PME, CutoffNonPeriodic, HBonds
-    from openmm.unit import amu, kelvin, kilojoules_per_mole, nanometers, picosecond
+    from openmm.unit import amu, kelvin, kilojoules_per_mole, nanometers, picosecond  # ty: ignore[unresolved-import]
 
     variants = params['residueVariants']
 
     logger = setup_task_logger(**log_params)
 
     # build OpenMM stuff here to avoid serializing SWIG objects (bad idea)
-    temp = temperature * kelvin
+    temp = temperature * kelvin  # ty: ignore[unsupported-operator]
     expl_params = dict(
         nonbondedMethod=PME,
         nonbondedCutoff=params['nonbonded_cutoff'] * nanometers,

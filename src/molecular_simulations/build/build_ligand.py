@@ -11,13 +11,16 @@ Classes:
     ComplexBuilder: Build general protein-ligand complex systems.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
 from pathlib import Path
+from typing import Any
 
 from MDAnalysis.lib.util import convert_aa_code
-from openbabel import pybel
+from openbabel import pybel  # ty: ignore[unresolved-import]
 from openmm.app import PDBFile
 from pdbfixer import PDBFixer
 from pdbfixer.pdbfixer import Sequence
@@ -73,13 +76,13 @@ class LigandBuilder:
     """
 
     def __init__(
-        self, path: PathLike, lig: str, lig_number: int = 0, file_prefix: str = ''
+        self, path: PathLike, lig: PathLike, lig_number: int = 0, file_prefix: str = ''
     ):
         """Initialize the LigandBuilder."""
-        self.path = path
-        self.lig = path / lig
+        self.path = Path(path)
+        self.lig: Path | str = self.path / str(lig)
         self.ln = lig_number
-        self.out_lig = path / f'{file_prefix}{Path(lig).stem}'
+        self.out_lig = self.path / f'{file_prefix}{Path(lig).stem}'
 
         if 'AMBERHOME' in os.environ:
             amberhome = Path(os.environ['AMBERHOME'])
@@ -103,8 +106,9 @@ class LigandBuilder:
         Raises:
             LigandError: If antechamber fails to parameterize the ligand.
         """
-        ext = self.lig.suffix
-        self.lig = self.lig.stem
+        lig_path = Path(self.lig)
+        ext = lig_path.suffix
+        self.lig = lig_path.stem
 
         convert_to_gaff = f'{self.antechamber} -i {self.lig}_prep.mol2 -fi mol2 -o \
                 {self.out_lig}.mol2 -fo mol2 -at gaff2 -c bcc -s 0 -pf y -rn LG{self.ln}'
@@ -233,20 +237,20 @@ class PLINDERBuilder(ImplicitSolvent):
     def __init__(self, path: PathLike, system_id: str, out: PathLike, **kwargs):
         """Initialize the PLINDERBuilder."""
         super().__init__(
-            path / system_id,
+            Path(path) / system_id,
             'receptor.pdb',
-            out / system_id,
             protein=True,
             rna=True,
             dna=True,
             phos_protein=True,
             mod_protein=True,
+            out=Path(out) / system_id,
             **kwargs,
         )
         self.system_id = system_id
         self.ffs.append('leaprc.gaff2')
         self.build_dir = self.out / 'build'
-        self.ions = None
+        self.ions: list[list[list[Any]]] | None = None
 
     def build(self) -> None:
         """Build the protein-ligand complex system.
@@ -266,7 +270,7 @@ class PLINDERBuilder(ImplicitSolvent):
         self.ligs = self.ligand_handler(ligs)
         self.assemble_system()
 
-    def ligand_handler(self, ligs: list[PathLike]) -> list[PathLike]:
+    def ligand_handler(self, ligs: list[str]) -> list[str]:
         """Parameterize all ligands in the system.
 
         Args:
@@ -345,6 +349,7 @@ class PLINDERBuilder(ImplicitSolvent):
             print(f'ERROR: {self.pdb}')
             raise LigandError from exc
 
+        assert self.ions is not None
         for ion in self.ions:
             for atom in ion:
                 ion_line = f'ATOM  {next_atom_num:>5}'
@@ -448,7 +453,7 @@ class PLINDERBuilder(ImplicitSolvent):
         with open(str(repaired_pdb), 'w') as f:
             PDBFile.writeFile(fixer.topology, fixer.positions, f)
 
-    def inject_fasta(self, chain_map: dict[str, list[str]]) -> Sequences:
+    def inject_fasta(self, chain_map: dict[str, list[Any]]) -> Sequences:
         """Inject FASTA sequence data for PDBFixer.
 
         Checks FASTA against actual sequence and modifies to correctly
@@ -489,7 +494,7 @@ class PLINDERBuilder(ImplicitSolvent):
 
         return sequences
 
-    def check_ptms(self, sequence: list[str], chain_residues: list[str]) -> list[str]:
+    def check_ptms(self, sequence: list[str], chain_residues: list[Any]) -> list[str]:
         """Check for post-translational modifications in the sequence.
 
         Compares the full sequence from FASTA against the partial
@@ -534,7 +539,7 @@ class PLINDERBuilder(ImplicitSolvent):
         ion = False
         mol = Chem.SDMolSupplier(str(ligand))[0]
 
-        ligand = []
+        ion_atoms: list[list[Any]] = []
         for atom, position in zip(mol.GetAtoms(),
                                   mol.GetConformer().GetPositions(),
                                   strict=True):
@@ -547,13 +552,13 @@ class PLINDERBuilder(ImplicitSolvent):
                     if abs(charge) > 1:
                         sign = f'{charge}{sign}'
 
-                    ligand.append([symbol, sign] + [x for x in position])
+                    ion_atoms.append([symbol, sign] + [x for x in position])
 
         if ion:
-            try:
-                self.ions.append(ligand)
-            except AttributeError:
-                self.ions = [ligand]
+            if self.ions is None:
+                self.ions = [ion_atoms]
+            else:
+                self.ions.append(ion_atoms)
             return False
 
         return True
@@ -653,6 +658,7 @@ class ComplexBuilder(ExplicitSolvent):
             prefix = Path(lig_param_prefix)
             self.lig_param_prefix = prefix.parent / prefix.stem
 
+        self.ion: str | Path | None = kwargs.pop('ion', None)
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -667,9 +673,9 @@ class ComplexBuilder(ExplicitSolvent):
 
         if self.lig_param_prefix is None:
             if isinstance(self.lig, list):
-                lig_paths = []
+                lig_paths: list[Path] = []
                 for i, lig in enumerate(self.lig):
-                    lig_paths += self.process_ligand(lig, i)
+                    lig_paths.append(self.process_ligand(lig, i))
 
                 self.lig = lig_paths
 
@@ -678,7 +684,7 @@ class ComplexBuilder(ExplicitSolvent):
         else:
             self.lig = self.lig_param_prefix
 
-        if hasattr(self, 'ion'):
+        if self.ion is not None:
             self.add_ion_to_pdb()
 
         self.prep_pdb()
@@ -686,7 +692,7 @@ class ComplexBuilder(ExplicitSolvent):
         num_ions = self.get_ion_numbers(dim**3)
         self.assemble_system(dim, num_ions)
 
-    def process_ligand(self, lig: PathLike, prefix: int | None = None) -> PathLike:
+    def process_ligand(self, lig: PathLike, prefix: int | None = None) -> Path:
         """Process and parameterize a single ligand.
 
         Args:
@@ -696,13 +702,13 @@ class ComplexBuilder(ExplicitSolvent):
         Returns:
             Path to parameterized ligand (without extension).
         """
-        if lig.parent != self.build_dir:
-            shutil.copy(lig, self.build_dir)
+        lig_path = Path(lig)
+        if lig_path.parent != self.build_dir:
+            shutil.copy(lig_path, self.build_dir)
 
-        if prefix is None:
-            prefix = ''
+        file_prefix = '' if prefix is None else str(prefix)
 
-        lig_builder = LigandBuilder(self.build_dir, lig, file_prefix=prefix)
+        lig_builder = LigandBuilder(self.build_dir, str(lig_path.name), file_prefix=file_prefix)
         lig_builder.parameterize_ligand()
 
         return lig_builder.out_lig
@@ -714,9 +720,10 @@ class ComplexBuilder(ExplicitSolvent):
         to the protein PDB before the END record.
         """
         ion = []
+        assert self.ion is not None
         with open(self.ion) as f:
             for line in f.readlines():
-                if any(['ATOM' in line, 'HETATOM' in line]):
+                if any(['ATOM' in line, 'HETATM' in line]):
                     ion.append(line)
 
         with open(self.pdb) as f:

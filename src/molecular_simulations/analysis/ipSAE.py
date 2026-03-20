@@ -310,7 +310,7 @@ class ScoreCalculator:
 
         return LIS
 
-    def compute_ipTM_ipSAE(self, chain1: str, chain2: str) -> tuple[float, float]:
+    def compute_ipTM_ipSAE(self, chain1: str, chain2: str) -> tuple[Any, Any]:
         """Compute ipTM and ipSAE scores for a chain pair.
 
         ipTM uses d0 based on total chain pair length and averages over
@@ -623,7 +623,7 @@ class ModelParser:
         )
 
     @staticmethod
-    def parse_cif_line(line: str, fields: dict[str, int]) -> dict[str, Any]:
+    def parse_cif_line(line: str, fields: dict[str, int]) -> dict[str, Any] | None:
         """Parse a single line of a CIF file.
 
         Args:

@@ -59,7 +59,7 @@ def configure_logging(
             record.hostname = socket.gethostname()
             # Fill MPI rank if available; else 0
             try:
-                from mpi4py import MPI
+                from mpi4py import MPI  # ty: ignore[unresolved-import]
 
                 record.mpirank = MPI.COMM_WORLD.Get_rank()
             except Exception:
@@ -75,13 +75,14 @@ def configure_logging(
         }
     }
 
-    if to_file or os.getenv('MS_LOG_FILE'):
+    file_path = to_file or os.getenv('MS_LOG_FILE')
+    if file_path:
         handlers['file'] = {
             'class': 'logging.handlers.RotatingFileHandler',
             'level': level,
             'filters': ['ctx'],
             'formatter': 'standard',
-            'filename': to_file or os.getenv('MS_LOG_FILE'),
+            'filename': file_path,
             'maxBytes': 10 * 1024 * 1024,
             'backupCount': 3,
             'encoding': 'utf-8',

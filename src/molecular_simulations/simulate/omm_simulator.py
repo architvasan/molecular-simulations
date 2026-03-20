@@ -15,13 +15,14 @@ Classes:
 import logging
 import os
 from copy import deepcopy
+from io import TextIOWrapper
 from pathlib import Path
+from typing import Any
 
 import MDAnalysis as mda
 import numpy as np
 from openmm import (
     CustomExternalForce,
-    Integrator,
     LangevinMiddleIntegrator,
     MonteCarloBarostat,
     MonteCarloMembraneBarostat,
@@ -46,17 +47,16 @@ from openmm.app import (
     Simulation,
     StateDataReporter,
 )
-from openmm.app.internal.singleton import Singleton
 from openmm.unit import (
     amu,
     angstroms,
     bar,
     kelvin,
     kilocalories_per_mole,
-    nanometer,
-    nanometers,
-    picosecond,
-    picoseconds,
+    nanometer,  # ty: ignore[unresolved-import]
+    nanometers,  # ty: ignore[unresolved-import]
+    picosecond,  # ty: ignore[unresolved-import]
+    picoseconds,  # ty: ignore[unresolved-import]
 )
 
 PathLike = Path | str
@@ -140,7 +140,7 @@ class Simulator:
         platform: str = 'CUDA',
         device_ids: list[int] = [0],
         force_constant: float = 10.0,
-        params: str | None = None,
+        params: str | list[str] | None = None,
         membrane: bool = False,
     ):
         self.path = Path(path)  # enforce path object
@@ -179,7 +179,7 @@ class Simulator:
         self.prod_log = p / 'prod.log'
         self.prod_freq = prod_reporter_frequency
         self.dt = prod_dt_in_ps
-        self.h_mass = hydrogen_mass_repartitioning * amu
+        self.h_mass = hydrogen_mass_repartitioning * amu  # ty: ignore[unsupported-operator]
 
         # simulation details
         self.heat_steps = heat_steps
@@ -230,22 +230,22 @@ class Simulator:
             is_membrane_system: True if this is a membrane-containing system.
         """
         self.barostat_args = {
-            'defaultPressure': 1 * bar,
+            'defaultPressure': 1 * bar,  # ty: ignore[unsupported-operator]
         }
 
         if is_membrane_system:
             self.barostat = MonteCarloMembraneBarostat
             self.barostat_args.update(
                 {
-                    'defaultSurfaceTension': 0 * bar * nanometer,
-                    'defaultTemperature': self.temperature * kelvin,
+                    'defaultSurfaceTension': 0 * bar * nanometer,  # ty: ignore[unsupported-operator]
+                    'defaultTemperature': self.temperature * kelvin,  # ty: ignore[unsupported-operator]
                     'xymode': MonteCarloMembraneBarostat.XYIsotropic,
                     'zmode': MonteCarloMembraneBarostat.ZFree,
                 }
             )
         else:
             self.barostat = MonteCarloBarostat
-            self.barostat_args.update({'temperature': self.temperature * kelvin})
+            self.barostat_args.update({'temperature': self.temperature * kelvin})  # ty: ignore[unsupported-operator]
 
     def load_system(self) -> System:
         """Load the molecular system based on force field type.
@@ -288,12 +288,12 @@ class Simulator:
                 str(self.top_file), periodicBoxVectors=self.coordinate.boxVectors
             )
 
-        system = self.topology.createSystem(
+        system = self.topology.createSystem(  # ty: ignore[missing-argument]
             nonbondedMethod=PME,
             removeCMMotion=False,
             nonbondedCutoff=1.0 * nanometer,
             constraints=HBonds,
-            hydrogenMass=1.5 * amu,
+            hydrogenMass=1.5 * amu,  # ty: ignore[unsupported-operator]
         )
 
         return system
@@ -318,7 +318,7 @@ class Simulator:
         if self.params is None:
             self.forcefield = ForceField('charmm36_2024.xml', 'charmm36/water.xml')
             system = self.forcefield.createSystem(
-                self.coordinate.topology,
+                self.coordinate.topology,  # ty: ignore[unresolved-attribute]
                 nonbondedMethod=PME,
                 nonbondedCutoff=1.2 * nanometer,
                 constraints=HBonds,
@@ -326,14 +326,14 @@ class Simulator:
         else:
             system = self.topology.createSystem(
                 self.parameter_set,
-                nonbondedMethod=PME,
+                nonbondedMethod=PME,  # ty: ignore[parameter-already-assigned]
                 nonbondedCutoff=1.2 * nanometer,
                 constraints=HBonds,
             )
 
         return system
 
-    def setup_sim(self, system: System, dt: float) -> tuple[Simulation, Integrator]:
+    def setup_sim(self, system: System, dt: float) -> tuple[Simulation, LangevinMiddleIntegrator]:
         """Build OpenMM Simulation and Integrator objects.
 
         Creates a LangevinMiddleIntegrator with the specified timestep and
@@ -344,10 +344,10 @@ class Simulator:
             dt: Integration timestep in picoseconds.
 
         Returns:
-            Tuple containing (Simulation, Integrator) objects.
+            Tuple containing (Simulation, LangevinMiddleIntegrator) objects.
         """
         integrator = LangevinMiddleIntegrator(
-            self.temperature * kelvin, 1 / picosecond, dt * picoseconds
+            self.temperature * kelvin, 1 / picosecond, dt * picoseconds  # ty: ignore[unsupported-operator]
         )
         simulation = Simulation(
             self.topology.topology,
@@ -472,7 +472,7 @@ class Simulator:
         self,
         simulation: Simulation,
         dcd_file: PathLike,
-        log_file: PathLike,
+        log_file: PathLike | TextIOWrapper,
         rst_file: PathLike,
         restart: bool = False,
     ) -> Simulation:
@@ -515,8 +515,8 @@ class Simulator:
         return simulation
 
     def _heating(
-        self, simulation: Simulation, integrator: Integrator
-    ) -> tuple[Simulation, Integrator]:
+        self, simulation: Simulation, integrator: LangevinMiddleIntegrator
+    ) -> tuple[Simulation, LangevinMiddleIntegrator]:
         """Perform slow heating protocol.
 
         Gradually heats the system from 5K to the target temperature over
@@ -524,15 +524,15 @@ class Simulator:
 
         Args:
             simulation: OpenMM Simulation object.
-            integrator: OpenMM Integrator object.
+            integrator: OpenMM LangevinMiddleIntegrator object.
 
         Returns:
-            Tuple of (Simulation, Integrator) after heating.
+            Tuple of (Simulation, LangevinMiddleIntegrator) after heating.
         """
-        simulation.context.setVelocitiesToTemperature(5 * kelvin)
+        simulation.context.setVelocitiesToTemperature(5 * kelvin)  # ty: ignore[unsupported-operator]
         T = 5
 
-        integrator.setTemperature(T * kelvin)
+        integrator.setTemperature(T * kelvin)  # ty: ignore[unsupported-operator]
         n_steps = 1000
         length = self.heat_steps // n_steps
         tstep = (self.temperature - T) / length
@@ -543,7 +543,7 @@ class Simulator:
             if temp > self.temperature:
                 temp = self.temperature
 
-            integrator.setTemperature(temp * kelvin)
+            integrator.setTemperature(temp * kelvin)  # ty: ignore[unsupported-operator]
 
         return simulation, integrator
 
@@ -675,8 +675,8 @@ class Simulator:
     @staticmethod
     def add_backbone_posres(
         system: System,
-        positions: np.ndarray,
-        atoms: list,
+        positions: Any,
+        atoms: Any,
         indices: list[int],
         restraint_force: float = 10.0,
     ) -> System:
@@ -746,7 +746,7 @@ class ImplicitSimulator(Simulator):
 
     def __init__(
         self,
-        path: str,
+        path: PathLike,
         top_name: str | None = None,
         coor_name: str | None = None,
         out_path: Path | None = None,
@@ -760,10 +760,10 @@ class ImplicitSimulator(Simulator):
         platform: str = 'CUDA',
         device_ids: list[int] = [0],
         force_constant: float = 10.0,
-        implicit_solvent: Singleton = GBn2,
+        implicit_solvent: Any = GBn2,
         solute_dielectric: float = 1.0,
         solvent_dielectric: float = 78.5,
-        **kwargs,
+        **kwargs: Any,
     ):
         super().__init__(
             path=path,
@@ -800,7 +800,7 @@ class ImplicitSimulator(Simulator):
             self.coordinate = AmberInpcrdFile(str(self.coor_file))
             self.topology = AmberPrmtopFile(str(self.top_file))
 
-        system = self.topology.createSystem(
+        system = self.topology.createSystem(  # ty: ignore[missing-argument]
             nonbondedMethod=NoCutoff,
             removeCMMotion=False,
             constraints=HBonds,
@@ -907,7 +907,7 @@ class CustomForcesSimulator(Simulator):
 
     def __init__(
         self,
-        path: str,
+        path: PathLike,
         custom_force_objects: list,
         equil_steps: int = 1_250_000,
         prod_steps: int = 250_000_000,
@@ -944,12 +944,12 @@ class CustomForcesSimulator(Simulator):
                 str(self.top_file), periodicBoxVectors=self.coordinate.boxVectors
             )
 
-        system = self.topology.createSystem(
+        system = self.topology.createSystem(  # ty: ignore[missing-argument]
             nonbondedMethod=PME,
             removeCMMotion=False,
             nonbondedCutoff=1.0 * nanometer,
             constraints=HBonds,
-            hydrogenMass=1.5 * amu,
+            hydrogenMass=1.5 * amu,  # ty: ignore[unsupported-operator]
         )
 
         system = self.add_forces(system)
@@ -1001,10 +1001,10 @@ class Minimizer:
         platform: str = 'OpenCL',
         device_ids: list[int] | None = [0],
     ):
-        self.topology = Path(topology)
-        self.coordinates = Path(coordinates)
+        self.topology: Any = Path(topology)
+        self.coordinates: Any = Path(coordinates)
 
-        self.path = self.topology.parent
+        self.path = Path(topology).parent
         self.out = self.path / out
         self.platform = Platform.getPlatformByName(platform)
         self.properties = {'Precision': 'mixed'}
@@ -1022,7 +1022,7 @@ class Minimizer:
         """
         system = self.load_files()
         integrator = LangevinMiddleIntegrator(
-            300 * kelvin, 1 / picosecond, 0.001 * picoseconds
+            300 * kelvin, 1 / picosecond, 0.001 * picoseconds  # ty: ignore[unsupported-operator]
         )
         simulation = Simulation(
             self.topology, system, integrator, self.platform, self.properties

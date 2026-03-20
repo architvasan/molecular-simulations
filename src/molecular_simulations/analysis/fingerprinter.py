@@ -399,6 +399,7 @@ class Fingerprinter:
             frame_index: Index of the current frame (may differ from
                 frame number if trajectory is discontinuous).
         """
+        assert self.u.atoms is not None
         positions = self.u.atoms.positions * 0.1  # convert to nm
 
         self.target_fingerprint[frame_index] = np.vstack(

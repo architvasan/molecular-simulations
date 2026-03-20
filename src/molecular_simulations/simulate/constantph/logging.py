@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -35,7 +35,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record) -> str:
         entry = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'run_id': self.run_id,
             'task_id': self.task_id,
             'level': record.levelname,

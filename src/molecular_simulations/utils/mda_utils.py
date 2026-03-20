@@ -2,7 +2,7 @@ from pathlib import Path
 
 import MDAnalysis as mda
 import numpy as np
-from rust_simulation_tools import kabsch_align
+from rust_simulation_tools import kabsch_align  # ty: ignore[unresolved-import]
 
 
 def trim_trajectory(
@@ -15,6 +15,7 @@ def trim_trajectory(
     align_sel: str | None = None,
 ) -> None:
     selection = u.select_atoms(sel) if sel is not None else u.atoms
+    assert selection is not None
 
     positions = np.zeros(
         (u.trajectory.n_frames // stride, selection.n_atoms, 3), dtype=np.float32

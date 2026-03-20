@@ -114,7 +114,7 @@ class SASA(AnalysisBase):
 
         return xyz
 
-    def measure_sasa(self, ag: mda.AtomGroup) -> float:
+    def measure_sasa(self, ag: mda.AtomGroup) -> np.ndarray:
         """Measure SASA of an AtomGroup in the current frame.
 
         Args:

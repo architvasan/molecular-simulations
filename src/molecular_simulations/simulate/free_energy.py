@@ -19,7 +19,7 @@ from openmm import (
 from parsl import Config, python_app
 
 try:
-    import tomllib  # Python 3.11+
+    import tomllib  # ty: ignore[unresolved-import]  # Python 3.11+
 except ModuleNotFoundError:
     import tomli as tomllib  # Python 3.10
 
@@ -169,7 +169,7 @@ class EVBAnalyzer:
         log_path: Path,
         log_prefix: str,
         k_umbrella: float,
-        rc0_values: np.ndarray,
+        rc0_values: np.ndarray | list[int | float],
         output_path: Path | None = None,
     ):
         """Initialize the EVB analyzer.
@@ -532,7 +532,7 @@ class EVBAnalyzer:
         n_bins: int,
     ) -> PMFResult:
         """Compute PMF using MBAR."""
-        import pymbar
+        import pymbar  # ty: ignore[unresolved-import]
 
         beta = 1.0 / (KB * temperature)
         N_k = np.array([len(rc) for rc in rc_data])
@@ -908,10 +908,11 @@ class EVB:
             p1 = a1.positions
             p2 = a2.positions
 
-            rc_min = (np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)) * 0.1  # to nm
-            rc_interval = np.abs(rc_min * 2) / self.n_windows
+            rc_min = float((np.linalg.norm(p0 - p2) - np.linalg.norm(p1 - p2)) * 0.1)  # to nm
+            rc_interval = float(np.abs(rc_min * 2) / self.n_windows)
             rc = [rc_min, rc_min * -1 + rc_interval, rc_interval]
 
+        assert rc is not None
         self.reaction_coordinate = self.construct_rc(rc)
 
     def construct_rc(self, rc: list[float]) -> np.ndarray:
@@ -1370,7 +1371,7 @@ class EVB:
         Reference:
             Shirts & Chodera, J. Chem. Phys. 129, 124105 (2008)
         """
-        import pymbar
+        import pymbar  # ty: ignore[unresolved-import]
 
         beta = 1.0 / (KB * temperature)
         k_umb = self.k  # Umbrella force constant in kJ/mol/nm²

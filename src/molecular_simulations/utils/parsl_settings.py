@@ -26,7 +26,7 @@ class BaseSettings(BaseModel):
     def from_yaml(cls: type[_T], filename: PathLike) -> _T:
         with open(filename) as fp:
             raw_data = yaml.safe_load(fp)
-        return cls(**raw_data)  # type: ignore
+        return cls(**raw_data)
 
 
 class BaseComputeSettings(ABC, BaseSettings):
@@ -49,7 +49,7 @@ class LocalSettings(BaseComputeSettings):
 
     def config_factory(self, run_dir: PathLike) -> Config:
         return Config(
-            run_dir=str(run_dir / 'runinfo'),
+            run_dir=str(Path(run_dir) / 'runinfo'),
             retries=self.retries,
             executors=[
                 HighThroughputExecutor(
@@ -83,7 +83,7 @@ class LocalCPUSettings(BaseComputeSettings):
 
     def config_factory(self, run_dir: PathLike) -> Config:
         return Config(
-            run_dir=str(run_dir / 'runinfo'),
+            run_dir=str(Path(run_dir) / 'runinfo'),
             retries=self.retries,
             executors=[
                 HighThroughputExecutor(
@@ -137,7 +137,7 @@ class PolarisSettings(BaseComputeSettings):
                     address=address_by_hostname(),
                     cpu_affinity='alternating',
                     prefetch_capacity=0,  # Increase if you have many more tasks than workers
-                    provider=PBSProProvider(  # type: ignore[no-untyped-call]
+                    provider=PBSProProvider(
                         launcher=MpiExecLauncher(
                             bind_cmd='--cpu-bind', overrides='--depth=64 --ppn 1'
                         ),  # Updates to the mpiexec command
@@ -158,7 +158,6 @@ class PolarisSettings(BaseComputeSettings):
             ],
             run_dir=str(run_dir),
             strategy=self.strategy,
-            app_cache=True,
         )
 
 
@@ -184,7 +183,7 @@ class AuroraSettings(BaseComputeSettings):
                     available_accelerators=self.available_accelerators,
                     cpu_affinity='block',  # Assigns cpus in sequential order
                     prefetch_capacity=0,
-                    max_workers=12,
+                    max_workers_per_node=12,
                     cores_per_worker=16,
                     heartbeat_period=30,
                     heartbeat_threshold=300,
@@ -202,7 +201,5 @@ class AuroraSettings(BaseComputeSettings):
                 ),
             ],
             run_dir=str(run_dir),
-            checkpoint_mode='task_exit',
             retries=self.retries,
-            app_cache=True,
         )

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+import numpy.typing as npt
 import polars as pl
 from scipy.optimize import curve_fit
 from scipy.special import logsumexp
@@ -308,6 +309,7 @@ class TitrationCurve:
             self.df, resids = self.parse_log(log_file)
 
         # Store residue IDs (converted to strings to match column names)
+        assert resids is not None, "No residue IDs found in any log file"
         self.resid_cols = [str(r) for r in resids]
 
         self.make_plots = make_plots
@@ -717,9 +719,10 @@ class TitrationCurve:
         if self.fits is None:
             raise RuntimeError('Must call compute_titrations() first')
 
-        pH_grid = np.linspace(
-            float(self.df['current_pH'].min()), float(self.df['current_pH'].max()), 200
-        )
+        pH_min_val = self.df['current_pH'].min()
+        pH_max_val = self.df['current_pH'].max()
+        assert isinstance(pH_min_val, (int, float)) and isinstance(pH_max_val, (int, float)), "No pH data found"
+        pH_grid = np.linspace(float(pH_min_val), float(pH_max_val), 200)
 
         curves = []
         for row in self.fits.iter_rows(named=True):
@@ -818,7 +821,9 @@ class TitrationCurve:
         return result
 
     @staticmethod
-    def hill_equation(pH: float, pKa: float, n: float) -> float:
+    def hill_equation(
+        pH: float | npt.NDArray[np.floating], pKa: float, n: float
+    ) -> float | npt.NDArray[np.floating]:
         """
         Hill equation for acid-base equilibrium.
 
@@ -875,20 +880,20 @@ class TitrationCurve:
         """
         # Run both methods
         fits_cf = self.compute_titrations_curvefit()
-        fits_uw = self.compute_titrations_uwham(verbose=False)
+        fits_wt = self.compute_titrations_weighted(verbose=False)
 
         # Join on resid
         comparison = fits_cf.join(
-            fits_uw.select(['resid', 'pKa', 'Hill_n', 'status']),
+            fits_wt.select(['resid', 'pKa', 'Hill_n']),
             on='resid',
-            suffix='_uwham',
+            suffix='_weighted',
         )
 
         # Add difference columns
         comparison = comparison.with_columns(
             [
-                (pl.col('pKa') - pl.col('pKa_uwham')).alias('pKa_diff'),
-                (pl.col('Hill_n') - pl.col('Hill_n_uwham')).alias('Hill_n_diff'),
+                (pl.col('pKa') - pl.col('pKa_weighted')).alias('pKa_diff'),
+                (pl.col('Hill_n') - pl.col('Hill_n_weighted')).alias('Hill_n_diff'),
             ]
         )
 
@@ -930,9 +935,8 @@ class TitrationAnalyzer:
         output_dir : Path or str, optional
             Directory for output files. If None, uses current directory.
         """
-        if isinstance(log_files, (str, Path)):
-            log_files = [log_files]
-        self.log_files = [Path(f) for f in log_files]
+        log_file_list: list[Path | str] = [log_files] if isinstance(log_files, (str, Path)) else list(log_files)
+        self.log_files = [Path(f) for f in log_file_list]
 
         self.output_dir = Path(output_dir) if output_dir else Path('.')
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -1049,6 +1053,7 @@ class TitrationAnalyzer:
 
     def _generate_comparison(self) -> None:
         """Generate comparison DataFrame between curvefit and weighted methods."""
+        assert self.fits_curvefit is not None and self.fits_weighted is not None
         self.comparison = self.fits_curvefit.join(
             self.fits_weighted.select(['resid', 'pKa', 'Hill_n']),
             on='resid',
@@ -1060,7 +1065,7 @@ class TitrationAnalyzer:
             ]
         )
 
-    def summary(self, show_all: bool = False) -> pl.DataFrame:
+    def summary(self, show_all: bool = False) -> pl.DataFrame | None:
         """
         Print and return summary of results.
 
@@ -1133,7 +1138,7 @@ class TitrationAnalyzer:
 
         return None
 
-    def get_results(self, method: str = 'curvefit') -> pl.DataFrame:
+    def get_results(self, method: str = 'curvefit') -> pl.DataFrame | None:
         """
         Get results DataFrame for specified method.
 
@@ -1195,11 +1200,14 @@ class TitrationAnalyzer:
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
         else:
-            fig = ax.get_figure()
+            _fig = ax.get_figure()
+            assert isinstance(_fig, plt.Figure), "Axes has no associated Figure"
+            fig = _fig
 
         resname = self.resid_to_resname.get(resid, 'UNK')
 
         # Raw data
+        assert self.titration_data is not None, "No titration data available"
         resid_data = self.titration_data.filter(pl.col('resid') == resid)
         pH_data = resid_data['current_pH'].to_numpy()
         frac_data = resid_data['fraction_protonated'].to_numpy()

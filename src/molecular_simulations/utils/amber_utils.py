@@ -20,6 +20,7 @@ def assign_chainids(
         return first + second
 
     chain_index = 0
+    assert u.residues is not None
     for residue in u.residues:
         residue.atoms.chainIDs = get_chain_label(chain_index)
 

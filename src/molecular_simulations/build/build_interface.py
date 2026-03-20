@@ -87,7 +87,7 @@ class InterfaceBuilder(ExplicitSolvent):
         self.interfaces = interfaces
         self.target = mda.Universe(target).select_atoms('all')
         self.binder = binder
-        self.root = self.path / target.name[:-4]
+        self.root = self.path / Path(target).name[:-4]
         self.com = self.target.center_of_mass()
 
     def build_all(self) -> None:
@@ -99,7 +99,7 @@ class InterfaceBuilder(ExplicitSolvent):
         """
         for site in self.interfaces:
             # set pathing for this target/binder/site
-            self.yaml_out = self.root / site / self.binder.name[:-4]
+            self.yaml_out = self.root / site / Path(self.binder).name[:-4]
             self.out = self.yaml_out / 'ddmd'
             self.out.mkdir(parents=True, exist_ok=True)
             self.out = self.out / 'system'
@@ -155,7 +155,7 @@ class InterfaceBuilder(ExplicitSolvent):
         with mda.Writer(self.pdb) as W:
             W.write(merged_atoms)
 
-    def parse_interface(self, site: str = 'site0') -> tuple:
+    def parse_interface(self, site: str = 'site0') -> list:
         """Extract configuration data for an interface site.
 
         Args:

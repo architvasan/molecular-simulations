@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TypeVar
 
 import yaml
-from calvados.cfg import Components, Config
+from calvados.cfg import Components, Config  # ty: ignore[unresolved-import]
 
 _T = TypeVar('_T')
 OptPath = Path | str | None

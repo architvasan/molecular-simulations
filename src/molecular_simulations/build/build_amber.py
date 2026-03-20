@@ -66,6 +66,7 @@ class ImplicitSolvent:
         path: OptPath,
         pdb: str,
         protein: bool = True,
+        glycans: bool = True,
         rna: bool = False,
         dna: bool = False,
         phos_protein: bool = False,
@@ -106,9 +107,10 @@ class ImplicitSolvent:
         self.tleap = str(Path(amberhome) / 'bin' / 'tleap')
         self.pdb4amber = str(Path(amberhome) / 'bin' / 'pdb4amber')
 
-        switches = [protein, rna, dna, phos_protein, mod_protein]
+        switches = [protein, glycans, rna, dna, phos_protein, mod_protein]
         ffs = [
             'leaprc.protein.ff19SB',
+            'leaprc.GLYCAM_06j-1',
             'leaprc.RNA.Shaw',
             'leaprc.DNA.OL21',
             'leaprc.phosaa19SB',
@@ -242,8 +244,10 @@ class ExplicitSolvent(ImplicitSolvent):
         self,
         path: PathLike,
         pdb: PathLike,
+        disulfide_residues: list[int] | None = None,
         padding: float = 10.0,
         protein: bool = True,
+        glycans: bool = False,
         rna: bool = False,
         dna: bool = False,
         phos_protein: bool = False,
@@ -257,8 +261,9 @@ class ExplicitSolvent(ImplicitSolvent):
         """Initialize the ExplicitSolvent builder."""
         super().__init__(
             path=path,
-            pdb=pdb,
+            pdb=str(pdb),
             protein=protein,
+            glycans=glycans,
             rna=rna,
             dna=dna,
             phos_protein=phos_protein,
@@ -272,6 +277,11 @@ class ExplicitSolvent(ImplicitSolvent):
         self.pad = padding
         self.ffs.extend(['leaprc.water.opc'])
         self.water_box = 'OPCBOX'
+        
+        if disulfide_residues is not None:
+            self.disulfides = '\n'.join([f'protein.{resid} = CYX' for resid in disulfide_residues])
+        else:
+            self.disulfides = '\n'
 
         if polarizable:
             self.ffs[0] = 'leaprc.protein.ff15ipq'
@@ -328,6 +338,7 @@ class ExplicitSolvent(ImplicitSolvent):
 
         tleap_complex = f"""{tleap_ffs}
         PROT = loadpdb {self.pdb}
+        {self.disulfides}
         
         setbox PROT centers
         set PROT box {{{dim} {dim} {dim}}}
@@ -399,3 +410,4 @@ class ExplicitSolvent(ImplicitSolvent):
             Number of each ion type (Na+ and Cl-) needed for 150mM.
         """
         return round(volume * 10e-6 * 9.03)
+

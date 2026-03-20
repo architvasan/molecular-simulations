@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import parmed as pmd
-from calvados import sim
+from calvados import sim  # ty: ignore[unresolved-import]
 from openmm.app import Simulation
 
 try:
-    import tomllib  # Python 3.11+
+    import tomllib  # type: ignore[import-not-found]  # Python 3.11+
 except ModuleNotFoundError:
     import tomli as tomllib  # Python 3.10
 from typing import TypeVar

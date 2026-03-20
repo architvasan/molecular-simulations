@@ -19,7 +19,7 @@ from openmm.app import (
     PDBFile,
     Topology,
 )
-from openmm.unit import kilocalories_per_mole, nanometers, picosecond
+from openmm.unit import kilocalories_per_mole, nanometers, picosecond  # type: ignore[attr-defined]
 from pdbfixer import PDBFixer
 from tqdm import tqdm
 
@@ -45,7 +45,7 @@ class InteractionEnergy(ABC):
         pass
 
     @abstractmethod
-    def energy(self):
+    def energy(self, *args, **kwargs):
         """Get the computed energy.
 
         Must be implemented by subclasses.
@@ -53,7 +53,7 @@ class InteractionEnergy(ABC):
         pass
 
     @abstractmethod
-    def get_selection(self):
+    def get_selection(self, *args, **kwargs):
         """Get the atom selection for energy calculation.
 
         Must be implemented by subclasses.
@@ -232,6 +232,7 @@ class StaticInteractionEnergy(InteractionEnergy):
                 and int(self.first) <= int(a.residue.id)
             ]
         elif self.first is None:
+            assert self.last is not None
             selection = [
                 a.index
                 for a in topology.atoms()
@@ -239,6 +240,7 @@ class StaticInteractionEnergy(InteractionEnergy):
                 and int(self.last) >= int(a.residue.id)
             ]
         else:
+            assert self.last is not None
             selection = [
                 a.index
                 for a in topology.atoms()
@@ -248,7 +250,7 @@ class StaticInteractionEnergy(InteractionEnergy):
 
         self.selection = selection
 
-    def fix_pdb(self) -> None:
+    def fix_pdb(self) -> tuple:
         """Repair the input PDB using PDBFixer.
 
         Adds missing residues, atoms, and hydrogens to create a
@@ -272,16 +274,16 @@ class StaticInteractionEnergy(InteractionEnergy):
         Returns:
             Array of shape (2, 1) containing [lj, coulomb] energies.
         """
-        return np.vstack([self.lj, self.coulomb])
+        return np.vstack([self.lj, self.coulomb])  # type: ignore[arg-type]
 
-    @staticmethod
     def energy(
+        self,
         context: Context,
         solute_coulomb_scale: int = 0,
         solute_lj_scale: int = 0,
         solvent_coulomb_scale: int = 0,
         solvent_lj_scale: int = 0,
-    ) -> float:
+    ):
         """Compute potential energy for the given context.
 
         Args:
@@ -419,7 +421,7 @@ class DynamicInteractionEnergy:
         self.progress = progress_bar
 
         self.IE = InteractionEnergyFrame(
-            self.system, self.top, chain, platform, first_residue, last_residue
+            self.system, self.top, chain, platform, first_residue, last_residue  # type: ignore[arg-type]
         )
 
     def compute_energies(self) -> None:
@@ -460,17 +462,18 @@ class DynamicInteractionEnergy:
         Raises:
             NotImplementedError: If topology file type is not supported.
         """
-        if top.suffix == '.pdb':
-            top = PDBFile(str(top)).topology
-            self.top = top
+        top_path = Path(top)
+        if top_path.suffix == '.pdb':
+            pdb_topology = PDBFile(str(top_path)).topology
+            self.top = pdb_topology
             forcefield = ForceField('amber14-all.xml', 'implicit/gbn2.xml')
             return forcefield.createSystem(
-                top, soluteDielectric=1.0, solventDielectric=78.5
+                pdb_topology, soluteDielectric=1.0, solventDielectric=78.5
             )
-        elif top.suffix == '.prmtop':
-            top = AmberPrmtopFile(str(top))
-            self.top = top
-            return top.createSystem(
+        elif top_path.suffix == '.prmtop':
+            prmtop = AmberPrmtopFile(str(top_path))
+            self.top = prmtop
+            return prmtop.createSystem(
                 nonbondedMethod=CutoffNonPeriodic,
                 nonbondedCutoff=2.0 * nanometers,
                 constraints=HBonds,
