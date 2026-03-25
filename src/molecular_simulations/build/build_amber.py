@@ -75,6 +75,7 @@ class ImplicitSolvent:
         delete_temp_file: bool = True,
         amberhome: str | None = None,
         debug: bool = False,
+        bond_commands: list[str] | None = None,
         **kwargs,
     ):
         """Initialize the ImplicitSolvent builder."""
@@ -145,9 +146,11 @@ class ImplicitSolvent:
         implicit solvent calculations.
         """
         ffs = '\n'.join([f'source {ff}' for ff in self.ffs])
+        bonds_block = '\n'.join(self.bond_commands)
         tleap_in = f"""
         {ffs}
         prot = loadpdb {self.pdb}
+        {bonds_block}
         set default pbradii mbondi3
         savepdb prot {self.out}
         saveamberparm prot {self.out.with_suffix(".prmtop")} {self.out.with_suffix(".inpcrd")}
@@ -332,6 +335,7 @@ class ExplicitSolvent(ImplicitSolvent):
             num_ions: Number of Na+/Cl- ion pairs for 150mM concentration.
         """
         tleap_ffs = '\n'.join([f'source {ff}' for ff in self.ffs])
+        bonds_block = '\n'.join(self.bond_commands)
         out_pdb = self.out
         out_top = self.out.with_suffix('.prmtop')
         out_coor = self.out.with_suffix('.inpcrd')
@@ -339,7 +343,7 @@ class ExplicitSolvent(ImplicitSolvent):
         tleap_complex = f"""{tleap_ffs}
         PROT = loadpdb {self.pdb}
         {self.disulfides}
-        
+        {bonds_block}
         setbox PROT centers
         set PROT box {{{dim} {dim} {dim}}}
         solvatebox PROT {self.water_box} {{0 0 0}}
